@@ -20,9 +20,9 @@
     completed: 0x5b8def,
   };
   const STATE_LABEL = {
-    active: "Active",
-    idle: "Idle",
-    stale: "Stale",
+    active: "Recently active",
+    idle: "Quiet",
+    stale: "Not recent",
     completed: "Completed",
   };
   const ZONE_LABEL = {
@@ -65,6 +65,20 @@
   let labelsVisible = true;
   let autoRotate = true;
   const labelSprites = [];
+  const displayNames = new Map();
+  let sessionSequence = 0;
+  let subagentSequence = 0;
+
+  function displayName(actor) {
+    if (!actor || !actor.id) return "—";
+    if (!displayNames.has(actor.id)) {
+      const name = actor.is_subagent
+        ? "Subagent " + (++subagentSequence)
+        : "Session " + (++sessionSequence);
+      displayNames.set(actor.id, name);
+    }
+    return displayNames.get(actor.id);
+  }
 
   // orbit state
   const cam = { theta: -Math.PI / 3, phi: 0.95, radius: 34, target: new THREE.Vector3(0, 0, 0), minR: 14, maxR: 70 };
@@ -295,7 +309,7 @@
     ctx.lineWidth = 3; ctx.stroke();
     ctx.fillStyle = "#e8ecf5"; ctx.font = "bold 30px system-ui, sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(text, 128, 34);
+    ctx.fillText(text, 128, 34, 244);
     const tex = new THREE.CanvasTexture(canvas);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
     sprite.scale.set(2.6, 0.65, 1);
@@ -333,7 +347,7 @@
         const { group, parts } = buildAvatar(colour);
         group.position.set(slot.x, 0, slot.z);
         scene.add(group);
-        const label = makeLabel(actor.id, colour);
+        const label = makeLabel(displayName(actor), colour);
         label.position.set(0, 2.15, 0);
         group.add(label);
         labelSprites.push(label);
@@ -371,13 +385,13 @@
     });
 
     updateStatus(payload);
+    if (selectedId && !rigs.has(selectedId)) select(null);
     if (selectedId && rigs.has(selectedId)) showDetail(rigs.get(selectedId).actor);
   }
 
   function updateLabel(rig) {
     const a = rig.actor;
-    const short = a.id.replace(/^s-/, "");
-    const text = (a.state === "completed" ? "✔ " : "") + short;
+    const text = displayName(a);
     const canvas = rig.label.material.map.image;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -387,7 +401,7 @@
     ctx.lineWidth = 3; ctx.stroke();
     ctx.fillStyle = "#e8ecf5"; ctx.font = "bold 30px system-ui, sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(text, 128, 34);
+    ctx.fillText(text, 128, 34, 244);
     rig.label.material.map.needsUpdate = true;
   }
 
@@ -410,6 +424,17 @@
       warn.style.display = "block";
     } else {
       warn.style.display = "none";
+    }
+
+    const empty = document.getElementById("empty");
+    if (empty) {
+      empty.hidden = !!p.degraded || (p.actors || []).length > 0;
+      const msg = document.getElementById("emptyText");
+      if (msg) {
+        msg.textContent = g.active_runs > 0 || g.busy
+          ? "Hermes has ongoing work, but no recent session can be linked to a character yet."
+          : "No recently active sessions. Historical conversations are hidden.";
+      }
     }
 
     const gtxt = g.available
@@ -435,18 +460,17 @@
       ["Zone", ZONE_LABEL[a.zone] || a.zone],
       ["Origin", a.origin],
       ["Subagent", a.is_subagent ? "yes" : "no"],
-      ["Parent", a.parent ? a.parent.replace(/^s-/, "") : "—"],
+      ["Parent", a.parent ? (displayNames.get(a.parent) || "Parent session not visible") : "—"],
       ["Last active", fmtAge(a.age_sec) + " ago"],
       ["Duration", fmtDur(a.duration_sec)],
       ["Tool calls", a.tools],
       ["Turns", a.turns],
-      ["Activity", Math.round((a.activity || 0) * 100) + "%"],
-      ["Pseudonym", a.id],
+      ["Historical activity", Math.round((a.activity || 0) * 100) + "%"],
     ];
     document.getElementById("detailBody").innerHTML = rows
       .map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`)
       .join("");
-    document.getElementById("detailTitle").textContent = a.id.replace(/^s-/, "");
+    document.getElementById("detailTitle").textContent = displayName(a);
   }
 
   function fmtAge(s) {
