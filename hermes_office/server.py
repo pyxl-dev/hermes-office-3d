@@ -31,6 +31,7 @@ from . import __version__
 from .adapter import build_payload
 from .config import Settings
 from .hermes_client import HermesClient
+from .redact import Pseudonymiser
 
 logger = logging.getLogger("hermes_office.server")
 
@@ -69,7 +70,10 @@ class Store:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._lock = threading.Lock()
-        self._payload: dict = build_payload(settings) if settings.demo_mode else {
+        # A single random salt for this server's lifetime keeps each avatar
+        # stable across 4-second refreshes, without exposing its raw session id.
+        self._pseudonymiser = Pseudonymiser()
+        self._payload: dict = build_payload(settings, pseudonymiser=self._pseudonymiser) if settings.demo_mode else {
             "mode": "live", "degraded": True, "generated_at": time.time(),
             "summary": {}, "gateway": {"available": False}, "capabilities": {},
             "notes": [], "actors": [],
@@ -82,7 +86,10 @@ class Store:
             return self._payload
 
     def refresh(self) -> dict:
-        payload = build_payload(self.settings, client=self._client)
+        payload = build_payload(
+            self.settings, client=self._client,
+            pseudonymiser=self._pseudonymiser,
+        )
         with self._lock:
             self._payload = payload
             subs = list(self._subscribers)

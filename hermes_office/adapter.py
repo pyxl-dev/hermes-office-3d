@@ -16,12 +16,12 @@ from .redact import Pseudonymiser, scrub_actor
 from .state import STATE_ACTIVE, STATE_COMPLETED, STATE_IDLE, STATE_STALE, Actor, adapt_row, rank_key
 
 CAPABILITY_NOTES = [
-    "One character per persisted Hermes session (not a fabricated agent).",
+    "Only recently active persisted sessions appear; older and completed sessions stay hidden.",
     "Subagent characters come from child session rows (parent_session_id / "
     "is_internal_child). If your build does not persist child rows for "
     "delegated work, subagents will not appear — we do not fake them.",
-    "Per-run detail (tool-by-tool progress) is not exposed by the session "
-    "list API; activity is derived from recorded tool/message counts only.",
+    "Session activity is inferred from last_active timestamps, not proof of an "
+    "ongoing run; tool/message counts are historical totals.",
     "Titles, previews, prompts, transcripts, ids and paths are never sent to "
     "the browser.",
 ]
@@ -95,10 +95,15 @@ def build_payload(
         if not r.get("archived") and not r.get("hidden")
     ]
 
-    actors = [adapt_row(r, now, settings, pseudo) for r in filtered]
-    actors.sort(key=rank_key)
-    if len(actors) > settings.max_actors:
-        actors = actors[: settings.max_actors]
+    # A persisted session is not a currently running worker. Old rows must
+    # never become idle-looking NPCs that fill the office forever. Only recent
+    # activity is visible; both ended and stale sessions are excluded.
+    recent = [
+        actor for actor in (adapt_row(r, now, settings, pseudo) for r in filtered)
+        if actor.state in (STATE_ACTIVE, STATE_IDLE)
+    ]
+    recent.sort(key=rank_key)
+    actors = recent[:settings.max_actors]
 
     cap = {
         "subagents": any(a.is_subagent for a in actors) or mode == "demo",

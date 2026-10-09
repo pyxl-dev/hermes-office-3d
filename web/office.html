@@ -32,6 +32,13 @@
   .dot.stale{background:var(--stale)} .dot.done{background:var(--done)}
   .dot.sub{background:#facc15}
 
+  .empty{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+    z-index:4;pointer-events:none;text-align:center;width:min(90vw,420px);
+    background:rgba(18,22,34,.91);border:1px solid var(--line);padding:1.3rem;
+    border-radius:16px;box-shadow:0 10px 38px rgba(0,0,0,.25)}
+  .empty[hidden]{display:none}
+  .empty strong{font-size:1rem}
+  .empty p{color:var(--dim);font-size:.8rem;line-height:1.5;margin:.6rem 0 0}
   #warn{position:fixed;top:3.1rem;left:50%;transform:translateX(-50%);z-index:6;display:none;
     background:#3a1d1d;border:1px solid #7f1d1d;color:#ffd9d9;padding:.4rem .7rem;
     border-radius:10px;font-size:.75rem;max-width:92vw}
@@ -77,15 +84,17 @@
     <span id="mode" class="badge demo">DEMO</span>
     <span class="gwbar"><span id="gw">gateway…</span><span id="updated"></span></span>
     <div class="stats">
-      <span class="pill"><span class="dot active"></span><span id="stat-active">0</span> active</span>
+      <span class="pill"><span class="dot active"></span><span id="stat-active">0</span> recent</span>
       <span class="pill"><span class="dot sub"></span><span id="stat-sub">0</span> sub</span>
-      <span class="pill opt"><span class="dot idle"></span><span id="stat-idle">0</span> idle</span>
-      <span class="pill opt"><span class="dot stale"></span><span id="stat-stale">0</span> stale</span>
-      <span class="pill opt"><span class="dot done"></span><span id="stat-done">0</span> done</span>
+      <span class="pill opt"><span class="dot idle"></span><span id="stat-idle">0</span> quiet</span>
     </div>
   </div>
 
   <div id="warn"></div>
+  <div id="empty" class="empty" hidden aria-live="polite">
+    <strong>No recent Hermes sessions</strong>
+    <p id="emptyText">Historical conversations are hidden.</p>
+  </div>
 
   <div class="controls">
     <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
@@ -96,10 +105,8 @@
   </div>
 
   <div class="legend">
-    <div><span class="dot active"></span> active</div>
-    <div><span class="dot idle"></span> idle</div>
-    <div><span class="dot stale"></span> stale</div>
-    <div><span class="dot done"></span> completed</div>
+    <div><span class="dot active"></span> recent activity</div>
+    <div><span class="dot idle"></span> quiet</div>
     <div><span class="dot sub"></span> subagent</div>
   </div>
 

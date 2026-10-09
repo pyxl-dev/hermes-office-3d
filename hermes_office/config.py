@@ -130,7 +130,7 @@ class Settings:
     # Recency thresholds (seconds) used to derive visible state from observable
     # session data only.
     active_window_s: int = 120
-    idle_window_s: int = 900
+    idle_window_s: int = 300
 
     # Upper bound on characters rendered in the office.
     max_actors: int = 48
@@ -181,7 +181,7 @@ class Settings:
             office_token=_env("HERMES_OFFICE_TOKEN"),
             poll_seconds=max(1, _env_int("HERMES_OFFICE_POLL_SECONDS", 4)),
             active_window_s=max(1, _env_int("HERMES_OFFICE_ACTIVE_SECONDS", 120)),
-            idle_window_s=max(1, _env_int("HERMES_OFFICE_IDLE_SECONDS", 900)),
+            idle_window_s=max(1, _env_int("HERMES_OFFICE_IDLE_SECONDS", 300)),
             max_actors=max(1, _env_int("HERMES_OFFICE_MAX_ACTORS", 48)),
             allow_remote=_env_bool("HERMES_OFFICE_ALLOW_REMOTE", False),
         )

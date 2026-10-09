@@ -33,3 +33,14 @@ def test_slow_sse_client_is_dropped_not_starved():
     for _ in range(20):  # never drained -> queue fills
         store.refresh()
     assert not store.is_subscribed(q)
+
+
+def test_pseudonyms_stay_stable_across_background_refreshes():
+    from hermes_office.server import Store
+
+    store = Store(Settings(host="127.0.0.1", port=0, office_token="test", hermes_api_key=""))
+    first = [a["id"] for a in store.payload()["actors"]]
+    assert first
+    for _ in range(3):
+        second = [a["id"] for a in store.refresh()["actors"]]
+        assert second == first
