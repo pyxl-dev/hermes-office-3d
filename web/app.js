@@ -411,8 +411,6 @@
     document.getElementById("stat-active").textContent = s.active || 0;
     document.getElementById("stat-sub").textContent = s.subagents || 0;
     document.getElementById("stat-idle").textContent = s.idle || 0;
-    document.getElementById("stat-stale").textContent = s.stale || 0;
-    document.getElementById("stat-done").textContent = s.completed || 0;
 
     const badge = document.getElementById("mode");
     badge.textContent = p.mode === "demo" ? "DEMO" : "LIVE";
@@ -438,7 +436,7 @@
     }
 
     const gtxt = g.available
-      ? `runs ${g.active_runs} · agents ${g.active_agents}${g.busy ? " · busy" : ""}`
+      ? `in-flight turns ${g.active_agents || 0} · API runs ${g.active_runs || 0}`
       : "gateway: n/a";
     document.getElementById("gw").textContent = gtxt;
     document.getElementById("updated").textContent =
@@ -463,9 +461,8 @@
       ["Parent", a.parent ? (displayNames.get(a.parent) || "Parent session not visible") : "—"],
       ["Last active", fmtAge(a.age_sec) + " ago"],
       ["Duration", fmtDur(a.duration_sec)],
-      ["Tool calls", a.tools],
-      ["Turns", a.turns],
-      ["Historical activity", Math.round((a.activity || 0) * 100) + "%"],
+      ["Tool calls (total)", a.tools],
+      ["Messages (total)", a.messages],
     ];
     document.getElementById("detailBody").innerHTML = rows
       .map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`)
