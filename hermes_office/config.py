@@ -7,6 +7,7 @@ single-user machine; anything that widens exposure must be set explicitly.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,20 +34,54 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+# Only these keys may affect this application. In particular, a repository
+# .env cannot silently set HTTP_PROXY, PYTHONPATH or other process-wide options.
+_SUPPORTED_ENV_KEYS = frozenset({
+    "HERMES_OFFICE_HOST",
+    "HERMES_OFFICE_PORT",
+    "HERMES_OFFICE_ALLOW_REMOTE",
+    "HERMES_OFFICE_TOKEN",
+    "HERMES_OFFICE_POLL_SECONDS",
+    "HERMES_OFFICE_ACTIVE_SECONDS",
+    "HERMES_OFFICE_IDLE_SECONDS",
+    "HERMES_OFFICE_MAX_ACTORS",
+    "HERMES_API_BASE",
+    "HERMES_API_KEY",
+})
+
+
+def _parse_env_value(value: str) -> str | None:
+    """Parse simple dotenv quoting and comments without executing any shell.
+
+    Unquoted comments begin at whitespace followed by '#'. Quoted values
+    preserve literal hashes and spaces, and may have a trailing comment.
+    Malformed quoted values are ignored rather than guessed.
+    """
+    value = value.strip()
+    if not value:
+        return ""
+    if value[0] in ("'", '"'):
+        quote = value[0]
+        end = value.find(quote, 1)
+        if end < 0:
+            return None
+        remainder = value[end + 1:].strip()
+        if remainder and not remainder.startswith("#"):
+            return None
+        return value[1:end]
+    # A # embedded in an unquoted token (for example, a URL fragment) is data.
+    return re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+
+
 def load_env_file(path: str = ".env") -> int:
-    """Load a local ``.env`` file into ``os.environ`` (dependency-free).
+    """Load supported configuration assignments from a local .env.
 
-    Deliberately conservative:
+    * Unknown keys and malformed assignments are ignored, not exported;
+    * unquoted inline comments and comments after quoted values are ignored;
+    * existing environment variables take precedence;
+    * no values or tokens are logged or expanded/evaluated.
 
-    * only ``KEY=VALUE`` lines with a valid identifier key are kept;
-    * ``#`` comments, blanks and unknown keys are ignored;
-    * an optional leading ``export`` and one layer of matching quotes are
-      stripped;
-    * **already-set environment variables win** — a real env var is never
-      overridden by the file;
-    * values are never logged.
-
-    Returns the number of variables set. Safe to call when the file is absent.
+    Return the number of variables newly set. Missing files are harmless.
     """
     file = Path(path)
     if not file.is_file():
@@ -59,16 +94,14 @@ def load_env_file(path: str = ".env") -> int:
         if line.startswith("export "):
             line = line[len("export "):].strip()
         key, sep, value = line.partition("=")
-        if not sep:
-            continue
         key = key.strip()
-        value = value.strip()
-        if not key.isidentifier():
+        if not sep or key not in _SUPPORTED_ENV_KEYS:
             continue
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
+        parsed = _parse_env_value(value)
+        if parsed is None:
+            continue
         if key not in os.environ:
-            os.environ[key] = value
+            os.environ[key] = parsed
             loaded += 1
     return loaded
 
