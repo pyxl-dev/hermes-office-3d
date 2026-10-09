@@ -1,8 +1,9 @@
 # Hermes Office 3D
 
 A browser-based, mobile-friendly, low-poly 3D office that visualizes your
-**real, currently-running Hermes Agent sessions** — one animated character per
-persisted session, plus subagents when the API reports them.
+**recently active Hermes Agent sessions** — one animated character per recent
+persisted session, including subagents when the API reports them. Older
+conversations and completed sessions are intentionally hidden.
 
 It is **read-only** and **private by default**: the browser only ever talks to
 this app's own server, which reads the local Hermes API server-side and hands
@@ -30,17 +31,18 @@ See [`NOTICE.md`](NOTICE.md) for attribution.
 
 ## What one character means (the honesty contract)
 
-Every character corresponds to a **real row** returned by the Hermes API's
-`GET /api/sessions`. Nothing is fabricated:
+Every character corresponds to a **recent real row** returned by the Hermes
+API's `GET /api/sessions`. In live mode, historical or completed sessions do
+**not** appear. A recently active row does not prove the session is running:
 
 | Shown | Source field | Notes |
 |---|---|---|
-| one character per session | `id` | id is hashed to a run-scoped pseudonym (`s-…`) |
-| `active` / `idle` / `stale` | `last_active`, `ended_at` | recency thresholds below |
-| `completed` | `ended_at` present | |
+| one character per recent session | `id` | id is pseudonymised server-side; the UI shows friendly names such as `Session 1` |
+| `recently active` / `quiet` | `last_active`, `ended_at` | derived from recency only; not live run status |
+| `completed` | `ended_at` present | never rendered in the active office |
 | subagent ring + parent link | `parent_session_id`, `is_internal_child` | child sessions, requested with `include_children=true` |
 | tool calls / turns | `tool_call_count`, `message_count` | plain counts |
-| activity % | counts (log-saturated) | derived, not random |
+| messages/tool calls | counts from session history | totals, not live progress |
 | origin | `source` | bucketed to `local` / `remote` / `agent` |
 
 Zone placement (`Workstation`, `Collab corner`, `Lounge`, `Quiet booth`,
@@ -52,9 +54,25 @@ such and never presented as a fact about what a session is doing.
 | State | Condition |
 |---|---|
 | `active` | not ended and `now - last_active ≤ ACTIVE_SECONDS` (default 120s) |
-| `idle` | not ended and `now - last_active ≤ IDLE_SECONDS` (default 900s) |
-| `stale` | not ended and older than `IDLE_SECONDS` |
-| `completed` | `ended_at` is set |
+| `idle` | not ended and `now - last_active ≤ IDLE_SECONDS` (default 300s) |
+| `stale` | not ended and older than `IDLE_SECONDS` — hidden |
+| `completed` | `ended_at` is set — hidden |
+
+### Running versus recently active
+
+Hermes' current session-list API does **not** expose a per-session running
+status. The global gateway counters (`active_agents`, `active_runs`) report
+in-flight work across the system, but cannot reliably be matched to the
+individual persisted sessions. In particular, a long, silent running tool may
+have an old last-activity timestamp. Hermes Office therefore displays only
+recent session activity, never pretends this is confirmed ongoing work, and
+shows the aggregate in-flight counters separately. The browser keeps the
+office empty if it cannot identify any recently active session, even when
+the gateway reports that work is in progress.
+
+Avatar labels are friendly local aliases (`Session 1`, `Subagent 1`), not
+personal session names or opaque hashes. They remain stable across refreshes
+within a server/browser session.
 
 ### Never exposed to the browser
 
@@ -78,8 +96,8 @@ python3 -m hermes_office --demo
 
 Open the printed URL and sign in with the token from
 `~/.hermes-office-token` (a random one is generated on first run and written
-there with mode `0600`). You will see eight **synthetic** characters (their ids
-start with `demo-`) covering every state.
+there with mode `0600`). You will see **synthetic** recent-session characters (internal fixture ids
+start with `demo-`); stale and completed fixtures remain hidden.
 
 ### 2. Live mode (your real sessions)
 
@@ -174,8 +192,9 @@ docs/                privacy + mobile-access guides
 - **Subagents** appear only if your Hermes build persists child session rows
   (`parent_session_id` / `is_internal_child`). If it does not, no subagent
   characters show — we do not fake them.
-- **Per-run tool-by-tool progress** is not exposed by the session list API, so
-  activity is derived from recorded counts, not live tool events.
+- **Per-session running status** is not exposed by the session list API. The
+  total in-flight count is available but cannot be reliably assigned to a
+  particular visible character. Recorded tool/message counts are cumulative.
 - The office renders the most recent/ most interesting `MAX_ACTORS` sessions
   (default 48); it is a monitor, not a full session browser.
 - `GET /v1/runs` is not listable, so active run *detail* is unavailable; the
