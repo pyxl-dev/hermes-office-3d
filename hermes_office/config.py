@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import secrets
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 def _env(name: str, default: str = "") -> str:
@@ -30,6 +31,46 @@ def _env_bool(name: str, default: bool) -> bool:
     if not raw:
         return default
     return raw in ("1", "true", "yes", "on")
+
+
+def load_env_file(path: str = ".env") -> int:
+    """Load a local ``.env`` file into ``os.environ`` (dependency-free).
+
+    Deliberately conservative:
+
+    * only ``KEY=VALUE`` lines with a valid identifier key are kept;
+    * ``#`` comments, blanks and unknown keys are ignored;
+    * an optional leading ``export`` and one layer of matching quotes are
+      stripped;
+    * **already-set environment variables win** — a real env var is never
+      overridden by the file;
+    * values are never logged.
+
+    Returns the number of variables set. Safe to call when the file is absent.
+    """
+    file = Path(path)
+    if not file.is_file():
+        return 0
+    loaded = 0
+    for raw in file.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if not key.isidentifier():
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key not in os.environ:
+            os.environ[key] = value
+            loaded += 1
+    return loaded
 
 
 @dataclass

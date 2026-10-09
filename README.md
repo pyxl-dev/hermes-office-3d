@@ -85,10 +85,19 @@ start with `demo-`) covering every state.
 
 ```bash
 cp .env.example .env
-# set a strong HERMES_OFFICE_TOKEN and your gateway key:
+# edit .env and set:
 #   HERMES_OFFICE_TOKEN=<pick-a-long-random-string>
 #   HERMES_API_KEY=<your Hermes API_SERVER_KEY>
 # (the key lives in ~/.hermes/.env as API_SERVER_KEY; copy it, don't commit it)
+make run          # or: python3 -m hermes_office
+```
+
+`python3 -m hermes_office` reads a local `.env` automatically (real environment
+variables always win). If you prefer not to use `.env`, export the variables in
+your shell instead:
+
+```bash
+set -a; source .env; set +a     # bash/zsh
 python3 -m hermes_office
 ```
 

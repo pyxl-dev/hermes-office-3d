@@ -38,7 +38,7 @@ The `/api/office` payload is built from a strict allow-list
 (`hermes_office/redact.py`). Session ids are pseudonymised with a **per-process
 random salt**, so pseudonyms cannot be correlated across restarts. Titles,
 previews, prompts, transcripts, user ids, model names, raw channel names,
-paths and costs are never included. See [`docs/PRIVACY.md`](PRIVACY.md).
+paths and costs are never included. See [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 ## Reporting
 
@@ -50,5 +50,5 @@ into an issue.
 
 Do not. Put an authenticated, private path in front of it (for example
 `tailscale serve` on a private tailnet) as described in
-[`docs/MOBILE_ACCESS.md`](MOBILE_ACCESS.md), keep the office token, and keep
+[`docs/MOBILE_ACCESS.md`](docs/MOBILE_ACCESS.md), keep the office token, and keep
 the Hermes API (`127.0.0.1:8642`) strictly private.

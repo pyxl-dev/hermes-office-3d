@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 
-from .config import Settings
+from .config import Settings, load_env_file
 from .server import serve
 
 
@@ -21,6 +21,9 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    # Read a local .env if present (real environment variables take precedence).
+    load_env_file()
 
     settings = Settings.from_env()
     if args.host:
