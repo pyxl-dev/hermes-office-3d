@@ -181,6 +181,19 @@ docs/                privacy + mobile-access guides
 - `GET /v1/runs` is not listable, so active run *detail* is unavailable; the
   aggregate run count comes from `GET /health/detailed`.
 
+## Screenshots
+
+Every image below is rendered by the built-in **demo** mode (synthetic fixtures);
+the `DEMO` badge is visible in each shot. No live session data is shown.
+
+| Desktop (1440×900) | Details panel (sanitized) |
+|---|---|
+| ![Demo office, desktop view](docs/screenshots/demo-desktop-1440x900.png) | ![Sanitized actor details panel](docs/screenshots/demo-desktop-detail-panel.png) |
+
+| Alternate camera angle | Mobile (390×844) |
+|---|---|
+| ![Alternate camera angle](docs/screenshots/demo-desktop-alternate-angle.png) | ![Mobile responsive layout](docs/screenshots/demo-mobile-390x844.png) |
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE). Third-party attribution in [`NOTICE.md`](NOTICE.md).
