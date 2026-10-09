@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-office-3d"
+version = "0.1.0"
+description = "Read-only, privacy-preserving 3D office that visualizes live Hermes Agent sessions."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "pyxl-dev", email = "72852241+pyxl-dev@users.noreply.github.com" }]
+keywords = ["hermes", "three.js", "3d", "observability", "sessions"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Monitoring",
+]
+# Runtime is standard-library only — no dependencies on purpose.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/pyxl-dev/hermes-office-3d"
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["hermes_office"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

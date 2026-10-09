@@ -1,0 +1,39 @@
+# --- secrets & local config -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+secrets*
+credentials*
+
+# --- runtime output & logs --------------------------------------------------
+*.log
+logs/
+*.pid
+*.sock
+
+# --- python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# --- data / dumps (never publish real session data) -------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+fixtures.local.json
+
+# --- os / editor ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# --- node (only if you add a bundler) ---------------------------------------
+node_modules/
+npm-debug.log*

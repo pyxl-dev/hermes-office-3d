@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Hermes Office 3D</title>
+<style>
+  :root{
+    --bg:#0c0f1a; --panel:rgba(18,22,34,.86); --line:#232a3d; --ink:#e8ecf5; --dim:#9aa4bd;
+    --active:#39d98a; --idle:#ffb454; --stale:#7a8496; --done:#5b8def;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  canvas{display:block}
+
+  .topbar{position:fixed;top:0;left:0;right:0;display:flex;gap:.6rem;align-items:center;
+    padding:.5rem .7rem;background:linear-gradient(180deg,rgba(8,10,18,.92),rgba(8,10,18,0));
+    pointer-events:none;z-index:5;flex-wrap:wrap}
+  .topbar .brand{font-weight:700;letter-spacing:.3px;font-size:.95rem}
+  .badge{font-size:.62rem;font-weight:700;padding:.16rem .5rem;border-radius:999px;
+    border:1px solid var(--line)}
+  .badge.live{color:#0b0b12;background:var(--active)}
+  .badge.demo{color:#0b0b12;background:var(--idle)}
+  .stats{display:flex;gap:.5rem;margin-left:auto;pointer-events:auto;flex-wrap:wrap}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    padding:.22rem .6rem;font-size:.72rem;display:flex;gap:.35rem;align-items:center}
+  .dot{width:.5rem;height:.5rem;border-radius:50%;display:inline-block}
+  .dot.active{background:var(--active)} .dot.idle{background:var(--idle)}
+  .dot.stale{background:var(--stale)} .dot.done{background:var(--done)}
+  .dot.sub{background:#facc15}
+
+  #warn{position:fixed;top:3.1rem;left:50%;transform:translateX(-50%);z-index:6;display:none;
+    background:#3a1d1d;border:1px solid #7f1d1d;color:#ffd9d9;padding:.4rem .7rem;
+    border-radius:10px;font-size:.75rem;max-width:92vw}
+
+  .controls{position:fixed;left:.7rem;bottom:.8rem;display:flex;flex-direction:column;gap:.4rem;z-index:5}
+  .controls button,.controls a{width:2.5rem;height:2.5rem;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink);font-size:1.05rem;cursor:pointer;backdrop-filter:blur(6px)}
+  .controls button.on{border-color:var(--active);color:var(--active)}
+
+  .legend{position:fixed;right:.7rem;bottom:.8rem;z-index:5;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:.5rem .6rem;font-size:.68rem;
+    display:flex;flex-direction:column;gap:.24rem;backdrop-filter:blur(6px)}
+  .legend div{display:flex;gap:.4rem;align-items:center}
+
+  .gwbar{position:fixed;left:.7rem;top:3rem;z-index:5;font-size:.68rem;color:var(--dim);
+    display:flex;gap:.7rem}
+
+  #detail{position:fixed;top:3.2rem;right:.7rem;width:300px;max-height:78vh;overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:.9rem;
+    backdrop-filter:blur(10px);transform:translateX(120%);transition:transform .25s ease;z-index:7}
+  #detail.open{transform:none}
+  #detail h2{margin:0 0 .1rem;font-size:.95rem}
+  #detail .sub{color:var(--dim);font-size:.68rem;margin:0 0 .7rem}
+  #detailClose{position:absolute;top:.5rem;right:.5rem;border:0;background:transparent;color:var(--dim);
+    font-size:1.1rem;cursor:pointer}
+  .kv{display:flex;justify-content:space-between;gap:.6rem;padding:.3rem 0;border-bottom:1px solid var(--line);
+    font-size:.76rem}
+  .kv span{color:var(--dim)} .kv b{font-weight:600}
+
+  body.mobile #detail{top:auto;left:.5rem;right:.5rem;bottom:3.6rem;width:auto;max-height:46vh;
+    transform:translateY(130%)}
+  body.mobile #detail.open{transform:none}
+  body.mobile .legend{display:none}
+  body.mobile .topbar .brand{font-size:.85rem}
+  @media (max-width:520px){ .stats .pill.opt{display:none} }
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <div class="topbar">
+    <span class="brand">Hermes Office 3D</span>
+    <span id="mode" class="badge demo">DEMO</span>
+    <span class="gwbar"><span id="gw">gateway…</span><span id="updated"></span></span>
+    <div class="stats">
+      <span class="pill"><span class="dot active"></span><span id="stat-active">0</span> active</span>
+      <span class="pill"><span class="dot sub"></span><span id="stat-sub">0</span> sub</span>
+      <span class="pill opt"><span class="dot idle"></span><span id="stat-idle">0</span> idle</span>
+      <span class="pill opt"><span class="dot stale"></span><span id="stat-stale">0</span> stale</span>
+      <span class="pill opt"><span class="dot done"></span><span id="stat-done">0</span> done</span>
+    </div>
+  </div>
+
+  <div id="warn"></div>
+
+  <div class="controls">
+    <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+    <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+    <button id="reset" title="Reset view" aria-label="Reset view">⌂</button>
+    <button id="rotate" class="on" title="Auto-rotate" aria-label="Auto-rotate">↻</button>
+    <button id="labels" class="on" title="Labels" aria-label="Toggle labels">🏷</button>
+  </div>
+
+  <div class="legend">
+    <div><span class="dot active"></span> active</div>
+    <div><span class="dot idle"></span> idle</div>
+    <div><span class="dot stale"></span> stale</div>
+    <div><span class="dot done"></span> completed</div>
+    <div><span class="dot sub"></span> subagent</div>
+  </div>
+
+  <aside id="detail" aria-live="polite">
+    <button id="detailClose" aria-label="Close">×</button>
+    <h2 id="detailTitle">—</h2>
+    <p class="sub">sanitized view · no titles or transcripts</p>
+    <div id="detailBody"></div>
+  </aside>
+
+  <script src="vendor/three.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
