@@ -462,7 +462,6 @@
       ["Last active", fmtAge(a.age_sec) + " ago"],
       ["Duration", fmtDur(a.duration_sec)],
       ["Tool calls (total)", a.tools],
-      ["Messages (total)", a.messages],
     ];
     document.getElementById("detailBody").innerHTML = rows
       .map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`)
