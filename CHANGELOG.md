@@ -11,4 +11,8 @@
 - Low-poly front-end with camera orbit (mouse + touch), responsive mobile
   layout, sanitized details panel, and a clear demo/live badge.
 - Demo mode with synthetic fixtures for offline use and testing.
-- Test suite (state, redaction, adapter boundary, HTTP auth/security).
+- Dependency-free `.env` loader (`load_env_file`) so `cp .env.example .env` works
+  as documented; real environment variables always win and values are never
+  logged.
+- Test suite (state, redaction, adapter boundary, HTTP auth/security, `.env`
+  parsing, and relative-link checks for the docs).
