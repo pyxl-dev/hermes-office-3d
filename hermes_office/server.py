@@ -287,6 +287,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_static(self, path: str) -> None:
         rel = "office.html" if path in ("", "/") else path.lstrip("/")
+        # A directory path (e.g. /pixel/) must serve its index.html, otherwise the
+        # bundled app 404s when opened without the explicit filename.
+        if rel in ("pixel", "pixel/"):
+            rel = "pixel/index.html"
+        elif rel.endswith("/"):
+            rel += "index.html"
         candidate = (WEB_DIR / rel).resolve()
         try:
             candidate.relative_to(WEB_DIR.resolve())
