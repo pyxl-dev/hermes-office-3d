@@ -178,6 +178,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            run_activity_log=_env("HERMES_OFFICE_RUN_ACTIVITY_LOG", ""),
             host=_env("HERMES_OFFICE_HOST", "127.0.0.1"),
             port=_env_int("HERMES_OFFICE_PORT", 8765),
             hermes_api_base=_env("HERMES_API_BASE", "http://127.0.0.1:8642").rstrip("/"),

@@ -93,14 +93,24 @@ class ToolEventTracker:
         self._active: dict[str, dict[str, dict[str, Any]]] = {}
         self._status: dict[str, str] = {}
         self._run_sessions: dict[str, str] = {}
+        # A background reader mutates while the request path snapshots.
+        self._lock = threading.RLock()
 
     # -- lifecycle ---------------------------------------------------------
     def bind_run(self, run_key: str, session_id: str | None) -> None:
         """Associate a run with its verified session (from the Runs API)."""
+        with self._lock:
+            self._bind_run(run_key, session_id)
+
+    def _bind_run(self, run_key: str, session_id: str | None) -> None:
         if session_id:
             self._run_sessions[run_key] = str(session_id)
 
     def forget_run(self, run_key: str) -> None:
+        with self._lock:
+            self._forget_run(run_key)
+
+    def _forget_run(self, run_key: str) -> None:
         self._last_seq.pop(run_key, None)
         self._active.pop(run_key, None)
         self._status.pop(run_key, None)
@@ -111,6 +121,10 @@ class ToolEventTracker:
 
     # -- event intake ------------------------------------------------------
     def handle(self, run_key: str, payload: dict) -> None:
+        with self._lock:
+            self._handle(run_key, payload)
+
+    def _handle(self, run_key: str, payload: dict) -> None:
         seq = payload.get("seq")
         if isinstance(seq, int):
             if seq <= self._last_seq.get(run_key, -1):
@@ -137,7 +151,11 @@ class ToolEventTracker:
 
     def set_status(self, run_key: str, status: str) -> None:
         """Terminal status clears activity: no stale typing after a run ends."""
-        self._status[run_key] = status
+        with self._lock:
+            self._status[run_key] = status
+            self._clear_if_terminal(run_key, status)
+
+    def _clear_if_terminal(self, run_key: str, status: str) -> None:
         if status in TERMINAL_STATUSES:
             self._active.pop(run_key, None)
 
@@ -148,6 +166,10 @@ class ToolEventTracker:
         Runs with no observed start emit nothing, so an idle-but-running run
         never looks like it is writing code.
         """
+        with self._lock:
+            return self._snapshot()
+
+    def _snapshot(self) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         for run_key, bucket in self._active.items():
             if not bucket:
@@ -183,6 +205,7 @@ class RunStreamWorker:
         max_streams: int = 4,
         connect_timeout: float = 4.0,
         backoff_s: float = 2.0,
+        status_check=None,
     ) -> None:
         self.tracker = tracker
         self.api_base = api_base.rstrip("/")
@@ -190,6 +213,9 @@ class RunStreamWorker:
         self.max_streams = max_streams
         self.connect_timeout = connect_timeout
         self.backoff_s = backoff_s
+        # Optional run_id -> status lookup. Without it a finished run is only
+        # released when the stream ends, never reconnected forever.
+        self.status_check = status_check
         self._stop = threading.Event()
         self._threads: dict[str, threading.Thread] = {}
         self._lock = threading.Lock()
@@ -260,3 +286,17 @@ class RunStreamWorker:
             if status in TERMINAL_STATUSES:
                 self.tracker.forget_run(run_key)
                 return
+            if self.status_check is not None:
+                try:
+                    checked = self.status_check(run_key)
+                except Exception:
+                    checked = None
+                if checked is not None:
+                    self.tracker.set_status(run_key, str(checked))
+                    if str(checked).lower() in TERMINAL_STATUSES:
+                        self.tracker.forget_run(run_key)
+                        return
+                else:
+                    # Unresolvable run: release the slot rather than retry forever.
+                    self.tracker.forget_run(run_key)
+                    return

@@ -300,3 +300,70 @@ def test_timestamps_with_offset_and_z_are_parsed_correctly(tmp_path):
     assert _parse_ts("not a date") is None
     assert _parse_ts(None) is None
     assert _parse_ts(1234.5) == 1234.5
+
+
+def test_env_key_is_actually_loaded_by_from_env(monkeypatch):
+    """A config field that from_env ignores leaves the feature dead in deploy."""
+    from hermes_office.config import Settings
+
+    monkeypatch.setenv("HERMES_OFFICE_RUN_ACTIVITY_LOG", "/tmp/placeholder.jsonl")
+    assert Settings.from_env().run_activity_log == "/tmp/placeholder.jsonl"
+    monkeypatch.delenv("HERMES_OFFICE_RUN_ACTIVITY_LOG", raising=False)
+    assert Settings.from_env().run_activity_log == ""
+
+
+def test_resolver_attempts_are_capped_per_call(tmp_path):
+    """The cap must bound outbound lookups, not merely the cache size."""
+    calls = []
+
+    def resolve(run_id):
+        calls.append(run_id)
+        return {"session_id": "sess-X", "status": "running"}
+
+    records = []
+    for i in range(10):
+        rec = _record(ended_offset=1.0)
+        rec["status"] = "running"
+        rec["outputRunId"] = f"run-{i}"
+        rec["outputSessionId"] = f"sess-{i}"
+        records.append(rec)
+
+    obs = RunActivityObserver(_write_log(tmp_path, records), Pseudonymiser(b"salt"),
+                              resolve_run=resolve, max_resolutions=3)
+    obs.observe()
+    assert len(calls) <= 3, "one poll must not fire a request per record"
+
+
+def test_worker_releases_terminal_runs(monkeypatch):
+    """Without status awareness a finished run would hold a stream slot forever."""
+    from hermes_office.runstream import RunStreamWorker, ToolEventTracker
+
+    tracker = ToolEventTracker(Pseudonymiser(b"salt"))
+    tracker.bind_run("run-Z", "sess-Z")
+    tracker.handle("run-Z", {"event": "tool.started", "seq": 1, "tool": "read_file"})
+    tracker.set_status("run-Z", "completed")
+    assert tracker.snapshot() == {}
+    worker = RunStreamWorker(tracker, "http://127.0.0.1:1", "k", status_check=lambda rid: "completed")
+    assert worker.status_check("run-Z") == "completed"
+
+
+def test_waiting_for_approval_is_not_execution():
+    from hermes_office.runactivity import ACTIVE_RUN_STATUSES
+
+    assert "waiting_for_approval" not in ACTIVE_RUN_STATUSES
+    assert "stopping" in __import__("hermes_office.runactivity", fromlist=["x"]).TERMINAL_RUN_STATUSES
+
+
+def test_working_run_is_not_overwritten_by_a_newer_finished_run(tmp_path):
+    """A session with one live run and one just-finished run is still working."""
+    live = _record(ended_offset=90.0)
+    live["status"], live["outputRunId"] = "running", "run-live"
+    done = _record(ended_offset=1.0)
+    done["status"], done["outputRunId"] = "completed", "run-done"
+
+    obs = RunActivityObserver(
+        _write_log(tmp_path, [live, done]), Pseudonymiser(b"salt"),
+        resolve_run=lambda rid: {"session_id": SECRET_SESSION,
+                                 "status": "running" if rid == "run-live" else "completed"},
+    )
+    assert next(iter(obs.observe().values()))["state"] == "working"

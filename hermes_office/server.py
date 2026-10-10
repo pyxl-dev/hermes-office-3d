@@ -78,7 +78,10 @@ class Store:
         self._pseudonymiser = Pseudonymiser()
         self._run_tools = ToolEventTracker(self._pseudonymiser)
         self._run_worker = (
-            RunStreamWorker(self._run_tools, settings.hermes_api_base, settings.hermes_api_key)
+            RunStreamWorker(
+                self._run_tools, settings.hermes_api_base, settings.hermes_api_key,
+                status_check=self._run_status_only,
+            )
             if settings.run_activity_log and settings.hermes_api_key
             else None
         )
@@ -97,6 +100,10 @@ class Store:
         }
         self._subscribers: set[queue.Queue] = set()
         self._client = HermesClient(settings)
+
+    def _run_status_only(self, run_id: str) -> str | None:
+        resolved = self._resolve_run(run_id)
+        return None if resolved is None else resolved.get("status")
 
     def _resolve_run(self, run_id: str) -> dict | None:
         """Authoritative run status from the local Hermes Runs API (read-only).

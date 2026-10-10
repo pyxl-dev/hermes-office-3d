@@ -190,7 +190,12 @@ function applyPayload(payload: { mode?: string; actors?: Array<Record<string, un
     const previous = activeToolByActor.get(id)
 
     if (toolId && toolId !== previous) {
-      // A new verified tool action: walk to work and start the tool animation.
+      // A new verified tool action: close any previous one first, so the
+      // renderer never holds two open tools for the same character.
+      if (previous) {
+        postToWebview({ type: 'agentToolDone', id, toolId: previous })
+        postToWebview({ type: 'agentToolsClear', id })
+      }
       activeToolByActor.set(id, toolId)
       postToWebview({ type: 'agentToolStart', id, toolId, status: String(activity?.category || 'other') })
       postToWebview({ type: 'agentStatus', id, status: 'active' })

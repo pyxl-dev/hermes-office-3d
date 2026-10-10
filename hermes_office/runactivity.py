@@ -43,8 +43,10 @@ CATEGORY_BY_TOOL = {
 
 # Run statuses that mean the run is genuinely executing right now. Anything else
 # (completed / cancelled / failed) is history, not activity.
-ACTIVE_RUN_STATUSES = frozenset({"running", "started", "queued", "waiting_for_approval"})
-TERMINAL_RUN_STATUSES = frozenset({"completed", "cancelled", "failed", "stopped", "error"})
+ACTIVE_RUN_STATUSES = frozenset({"running", "started"})
+TERMINAL_RUN_STATUSES = frozenset(
+    {"completed", "cancelled", "failed", "stopped", "stopping", "error", "interrupted"}
+)
 
 ALLOWED_FIELDS = frozenset(
     {"tool", "status", "ok", "startedAt", "endedAt", "outputSessionId", "outputRunId"}
@@ -109,6 +111,7 @@ class RunActivityObserver:
         self.resolve_ttl_s = resolve_ttl_s
         self.max_resolutions = max_resolutions
         self._cache: dict[str, tuple[float, dict | None]] = {}
+        self._budget = max_resolutions
         # Runs the Runs API confirmed active, with their verified session.
         self.confirmed_runs: dict[str, str] = {}
 
@@ -153,6 +156,10 @@ class RunActivityObserver:
             return {}
         now = now if now is not None else time.time()
         latest: dict[str, dict[str, Any]] = {}
+        # Bound outbound lookups per call, not merely the cache: a log full of
+        # uncached runs must not become a burst of HTTP requests.
+        self._budget = min(self.max_resolutions, self._budget)
+        attempts = 0
 
         for raw in self._tail():
             try:
@@ -182,7 +189,12 @@ class RunActivityObserver:
             # returns the session id; anything less stays neutral.
             state = "recent"
             if has_run and status in ACTIVE_RUN_STATUSES:
-                confirmed = self._resolve(str(record.get("outputRunId")), now)
+                attempts += 1
+                confirmed = (
+                    self._resolve(str(record.get("outputRunId")), now)
+                    if attempts <= self.max_resolutions
+                    else None
+                )
                 if (
                     confirmed
                     and str(confirmed.get("status") or "").lower() in ACTIVE_RUN_STATUSES
@@ -193,8 +205,13 @@ class RunActivityObserver:
                     self.confirmed_runs[str(record.get("outputRunId"))] = str(session_id)
 
             category = CATEGORY_BY_TOOL.get(tool, "other")
-            previous = latest.get(pseudo := self.pseudonymiser(str(session_id)))
-            if previous is None or age < previous["_age"]:
+            # A run observed as running is proof of current execution; a run
+            # observed as terminal is proof it stopped.
+            pseudo = self.pseudonymiser(str(session_id))
+            previous = latest.get(pseudo)
+            if previous is not None and previous["state"] == "working" and state != "working":
+                continue  # working wins for this session
+            if previous is None or age < previous["_age"] or state == "working":
                 latest[pseudo] = {
                     "_age": age,
                     "state": state,
@@ -202,8 +219,9 @@ class RunActivityObserver:
                     "age": _age_bucket(age),
                 }
 
+        ordered = sorted(latest.items(), key=lambda kv: (kv[1]["state"] != "working", kv[1]["_age"]))
         out: dict[str, dict[str, Any]] = {}
-        for pseudo, entry in list(latest.items())[: self.max_records]:
+        for pseudo, entry in ordered[: self.max_records]:
             out[pseudo] = {
                 "state": entry["state"],
                 "category": entry["category"],
