@@ -392,3 +392,13 @@ def test_verified_working_session_survives_the_recency_filter():
     kept = build_payload(settings, client=_FakeClient([row]), now=now, pseudonymiser=pseudo,
                          run_activity={pseudo("S-QUIET"): {"state": "working", "category": "other", "age": "now"}})
     assert [a["id"] for a in kept["actors"]] == [pseudo("S-QUIET")]
+
+
+def test_tool_activity_merge_preserves_state():
+    """The tracker snapshot must enrich an entry, not replace it."""
+    import re
+    from pathlib import Path as _P
+
+    src = (_P(__file__).resolve().parent.parent / "hermes_office" / "server.py").read_text(encoding="utf-8")
+    assert "observed.update(self._run_tools.snapshot())" not in src, "update() would drop 'state'"
+    assert "merged_entry" in src

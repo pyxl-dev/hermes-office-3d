@@ -142,7 +142,11 @@ class Store:
         if self._run_worker is not None:
             for run_key, session_id in list(getattr(self._run_activity, "confirmed_runs", {}).items()):
                 self._run_worker.track_run(run_key, session_id)
-        observed.update(self._run_tools.snapshot())
+        for pseudo, entry in self._run_tools.snapshot().items():
+            merged_entry = dict(observed.get(pseudo) or {})
+            merged_entry.update(entry)
+            merged_entry.setdefault("state", "recent")
+            observed[pseudo] = merged_entry
         payload = build_payload(
             self.settings, client=self._client,
             pseudonymiser=self._pseudonymiser,
