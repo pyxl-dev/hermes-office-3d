@@ -60,6 +60,25 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
     }
   }, [officeState, zoom])
 
+  // Hermes adaptation: fit the whole compact room to the viewport (CSS pixels) so
+  // the office is never a small island in a large empty canvas. Re-fits on resize.
+  useEffect(() => {
+    const fit = () => {
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
+      const layout = officeState.getLayout()
+      const mapW = layout.cols * TILE_SIZE
+      const mapH = layout.rows * TILE_SIZE
+      const z = Math.max(1, Math.min(6, Math.min(rect.width / mapW, rect.height / mapH) * 0.98))
+      onZoomChange(z)
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [officeState, onZoomChange])
+
   // Resize canvas backing store to device pixels (no DPR transform on ctx)
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current

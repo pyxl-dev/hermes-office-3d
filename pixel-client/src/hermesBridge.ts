@@ -162,16 +162,6 @@ function hideInertControls(): void {
   }
   apply()
   window.setInterval(apply, 1500) // toolbar re-renders; keep them hidden
-
-  // Initial zoom-to-fit: the default zoom leaves the compact room small inside a
-  // large dark canvas. Click the zoom-in control a bounded number of times.
-  let bumps = 0
-  const zoomIn = window.setInterval(() => {
-    const plus = Array.from(document.querySelectorAll('button')).find(
-      (b) => (b.textContent || '').trim() === '+',
-    ) as HTMLButtonElement | undefined
-    if (plus && bumps < 3) { plus.click(); bumps++ } else window.clearInterval(zoomIn)
-  }, 600)
 }
 
 export async function initHermesBridge(): Promise<void> {

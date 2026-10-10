@@ -130,6 +130,9 @@ function orientationToFacing(orientation: string): Direction {
  *  Facing priority: 1) chair orientation, 2) adjacent desk, 3) forward (DOWN). */
 export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
   const seats = new Map<string, Seat>()
+  // Hermes adaptation: seats adjacent to a desk are handed out first so agents
+  // take workstation chairs; lounge/couch seats are only used on overflow.
+  const workstationUids = new Set<string>()
 
   // Build set of all desk tiles
   const deskTiles = new Set<string>()
@@ -187,12 +190,24 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
           facingDir,
           assigned: false,
         })
+        // Hermes adaptation: remember which seats sit at a workstation (a chair
+        // adjacent to a desk) so they can be handed out before lounge seating.
+        for (const d of dirs) {
+          if (deskTiles.has(`${tileCol + d.dc},${tileRow + d.dr}`)) {
+            workstationUids.add(seatUid)
+            break
+          }
+        }
         seatCount++
       }
     }
   }
 
-  return seats
+  // Rebuild in workstation-first order (Map iteration order drives findFreeSeat).
+  const ordered = new Map<string, Seat>()
+  for (const [uid, seat] of seats) if (workstationUids.has(uid)) ordered.set(uid, seat)
+  for (const [uid, seat] of seats) if (!workstationUids.has(uid)) ordered.set(uid, seat)
+  return ordered
 }
 
 /** Get the set of tiles occupied by seats (so they can be excluded from blocked tiles) */
