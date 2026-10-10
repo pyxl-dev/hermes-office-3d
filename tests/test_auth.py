@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from conftest import TOKEN, http, json_body
 
 
@@ -28,6 +30,25 @@ def test_api_accepts_bearer_token(server):
 def test_api_accepts_header_token(server):
     status, _, _ = http(server, "/api/office", headers={"X-Office-Token": TOKEN})
     assert status == 200
+
+
+def test_root_redirects_to_primary_pixel_office_after_auth(server):
+    # The browser's main office URL must open Pixel Agents, never legacy 3D.
+    status, headers, _ = http(server, "/", token=TOKEN)
+    assert status == 303
+    assert headers["Location"] == "/pixel/"
+    status, headers, body = http(server, "/pixel/", token=TOKEN)
+    assert status == 200
+    assert "text/html" in headers["Content-Type"]
+    assert "Hermes Office 3D" not in body
+
+
+def test_root_requires_auth_and_legacy_3d_remains_available(server):
+    status, _, _ = http(server, "/")
+    assert status == 401
+    status, _, body = http(server, "/office.html", token=TOKEN)
+    assert status == 200
+    assert "Hermes Office 3D" in body
 
 
 def test_static_requires_auth(server):
@@ -80,6 +101,7 @@ def test_login_flow_sets_cookie(server):
     assert "office_token=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "SameSite=Strict" in set_cookie
+    assert headers["Location"] == "/pixel/"
     # the cookie then authenticates a static request
     cookie = set_cookie.split(";")[0]
     status, _, body = http(server, "/api/office", cookie=cookie)
@@ -128,3 +150,11 @@ def test_sse_accepts_cookie_auth(server):
     sock.close()
     assert "200" in head.split("\r\n")[0]
     assert "text/event-stream" in head
+
+
+def test_root_redirect_is_not_cacheable():
+    """A cached 303 to the legacy view would keep sending users back to 3D."""
+    src = (Path(__file__).resolve().parent.parent / "hermes_office" / "server.py").read_text(encoding="utf-8")
+    start = src.index("def _redirect")
+    fn = src[start : src.index("\n    def ", start + 1)]
+    assert 'Cache-Control' in fn and 'no-store' in fn

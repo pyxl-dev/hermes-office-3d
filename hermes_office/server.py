@@ -205,7 +205,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
-        self._finish_headers(extra)
+        # Redirects must never be cached: a browser that cached the old "/" -> 3D
+        # response would keep landing on the legacy view after the 2D switch.
+        headers = {"Cache-Control": "no-store"}
+        headers.update(extra or {})
+        self._finish_headers(headers)
         self.end_headers()
 
     # -- routing ---------------------------------------------------------------
@@ -281,12 +285,17 @@ class Handler(BaseHTTPRequestHandler):
                 f"{COOKIE_NAME}={self.token}; Path=/; HttpOnly; "
                 f"SameSite=Strict; Max-Age=43200" + ("; Secure" if secure else "")
             )
-            self._redirect("/", {"Set-Cookie": cookie})
+            self._redirect("/pixel/", {"Set-Cookie": cookie})
         else:
             self._redirect("/login?error=1")
 
     def _serve_static(self, path: str) -> None:
-        rel = "office.html" if path in ("", "/") else path.lstrip("/")
+        # Pixel Agents 2D is the primary UI; the old 3D view remains at
+        # /office.html as a deliberate, authenticated rollback.
+        if path in ("", "/"):
+            self._redirect("/pixel/")
+            return
+        rel = path.lstrip("/")
         # A directory path (e.g. /pixel/) must serve its index.html, otherwise the
         # bundled app 404s when opened without the explicit filename.
         if rel in ("pixel", "pixel/"):
@@ -357,7 +366,7 @@ _LOGIN_HTML = """<!doctype html>
  .err{color:#ff8080;font-size:.8rem}
 </style></head>
 <body><form method="post" action="/login">
- <h1>Hermes Office 3D</h1>
+ <h1>Hermes Office</h1>
  <p>Private view. Enter the office access token.</p>
  <!--ERR-->
  <input type="password" name="token" autocomplete="current-password"
