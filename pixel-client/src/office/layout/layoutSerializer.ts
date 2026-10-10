@@ -165,11 +165,35 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
     const entry = getCatalogEntry(item.type)
     if (!entry || entry.category !== 'chairs') continue
 
-    let seatCount = 0
+    // Hermes adaptation: a chair is ONE seat. Upstream turned every footprint tile
+    // into a seat, so a 1x2 chair produced two seats and the agent was drawn on the
+    // chair's top tile while the chair sprite extended below it - which read as an
+    // agent standing above an empty chair. Seats now use the chair's BOTTOM tile so
+    // the character lands on the seat surface. Multi-tile chairs still yield one
+    // seat per column (couches keep their two places).
+    const chairTiles = new Set<string>()
     for (let dr = 0; dr < entry.footprintH; dr++) {
       for (let dc = 0; dc < entry.footprintW; dc++) {
+        chairTiles.add(`${item.col + dc},${item.row + dr}`)
+      }
+    }
+    let isWorkstationChair = false
+    if (!isLoungeSeat(item.type)) {
+      for (const key of chairTiles) {
+        const [tc, tr] = key.split(',').map(Number)
+        if (dirs.some((d) => deskTiles.has(`${tc + d.dc},${tr + d.dr}`))) {
+          isWorkstationChair = true
+          break
+        }
+      }
+    }
+
+    let seatCount = 0
+    const seatRow = item.row + entry.footprintH - 1
+    for (let dc = 0; dc < entry.footprintW; dc++) {
+      {
         const tileCol = item.col + dc
-        const tileRow = item.row + dr
+        const tileRow = seatRow
 
         // Determine facing direction:
         // 1) Chair orientation takes priority
@@ -196,16 +220,7 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
           facingDir,
           assigned: false,
         })
-        // Hermes adaptation: remember whether this seat is a real workstation seat
-        // (a non-lounge chair/bench next to a workstation desk).
-        if (!isLoungeSeat(item.type)) {
-          for (const d of dirs) {
-            if (deskTiles.has(`${tileCol + d.dc},${tileRow + d.dr}`)) {
-              workstationUids.add(seatUid)
-              break
-            }
-          }
-        }
+        if (isWorkstationChair) workstationUids.add(seatUid)
         seatCount++
       }
     }

@@ -72,3 +72,24 @@ def test_camera_fits_the_layout_to_the_viewport():
     assert "canvas.width / bboxW" in src
     assert "const VOID = 255" in src
     assert "onZoomChange(z)" in src
+
+
+def test_chair_seat_uses_the_bottom_tile_only():
+    """A chair is ONE seat at its bottom tile.
+
+    Upstream turned every footprint tile into a seat, so a 1x2 chair produced two
+    seats and the agent was drawn on the chair's top tile while the sprite extended
+    below - reading as an agent standing above an empty chair.
+    """
+    src = (SRC / "office" / "layout" / "layoutSerializer.ts").read_text(encoding="utf-8")
+    assert "const seatRow = item.row + entry.footprintH - 1" in src
+    # the seat loop iterates columns only, never rows
+    assert "for (let dc = 0; dc < entry.footprintW; dc++) {" in src
+    assert "const seatUid = seatCount === 0 ? item.uid" in src
+
+
+def test_workstation_flag_uses_any_chair_tile():
+    """Adjacency must consider the whole chair, since the seat sits on the bottom tile."""
+    src = (SRC / "office" / "layout" / "layoutSerializer.ts").read_text(encoding="utf-8")
+    assert "let isWorkstationChair = false" in src
+    assert "if (isWorkstationChair) workstationUids.add(seatUid)" in src
