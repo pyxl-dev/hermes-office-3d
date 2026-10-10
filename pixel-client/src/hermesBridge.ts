@@ -74,15 +74,15 @@ async function handleReady(): Promise<void> {
     if (walls.length) postToWebview({ type: 'wallTilesLoaded', sprites: walls })
   } catch { /* ignore */ }
 
-  // The furnished room comes from the default layout (hardcoded fallback in the
-  // renderer when a furniture catalog is absent) — never a fabricated layout.
+  // The furnished room: load the layout ALWAYS (independent of the catalog), so a
+  // missing furniture catalog can never silently downgrade the office.
   let layout: Record<string, unknown> | null = null
   try {
     const assets = await loadFurnitureAssets()
     if (assets) {
       postToWebview({ type: 'furnitureAssetsLoaded', catalog: assets.catalog, sprites: assets.sprites })
-      layout = await loadDefaultLayout()
     }
+    layout = await loadDefaultLayout()
   } catch { /* ignore */ }
   postToWebview({ type: 'layoutLoaded', layout })
 }
@@ -128,6 +128,34 @@ async function poll(): Promise<void> {
   } catch { /* transient */ }
 }
 
+/**
+ * The upstream toolbar offers "+ Agent" (spawn a demo agent) and an Open-Claude
+ * flow. In Hermes mode characters come from real sessions, so those controls are
+ * inert and must not look clickable. The layout editor is preserved.
+ */
+function hideInertControls(): void {
+  const apply = () => {
+    for (const b of Array.from(document.querySelectorAll('button'))) {
+      const t = (b.textContent || '').trim().toLowerCase()
+      if (t.includes('+ agent') || t.includes('open claude') || t.includes('new agent')) {
+        ;(b as HTMLButtonElement).style.display = 'none'
+      }
+    }
+  }
+  apply()
+  window.setInterval(apply, 1500) // toolbar re-renders; keep them hidden
+
+  // Initial zoom-to-fit: the default zoom leaves the compact room small inside a
+  // large dark canvas. Click the zoom-in control a bounded number of times.
+  let bumps = 0
+  const zoomIn = window.setInterval(() => {
+    const plus = Array.from(document.querySelectorAll('button')).find(
+      (b) => (b.textContent || '').trim() === '+',
+    ) as HTMLButtonElement | undefined
+    if (plus && bumps < 3) { plus.click(); bumps++ } else window.clearInterval(zoomIn)
+  }, 600)
+}
+
 export async function initHermesBridge(): Promise<void> {
   onWebviewMessage(async (msg) => {
     if (msg.type === 'webviewReady') {
@@ -135,6 +163,16 @@ export async function initHermesBridge(): Promise<void> {
       await handleReady()
       await poll()
       window.setInterval(poll, POLL_MS)
+      hideInertControls()
+    }
+    // Clicking an avatar asks the backend to focus that agent. We answer with the
+    // sanitized selection event the app expects (no transcript, no raw ids).
+    else if (msg.type === 'focusAgent') {
+      const id = msg.id as number
+      postToWebview({ type: 'agentSelected', id })
+      const pid = [...idByActor.entries()].find(([, v]) => v === id)?.[0]
+      const name = pid ? nameByActor.get(pid) : undefined
+      if (name) document.title = `Hermes Office — ${name}`
     }
     // In Hermes mode the "+ Agent" button is inert: characters reflect real
     // sessions only. Layout edits are kept locally but not persisted upstream.
