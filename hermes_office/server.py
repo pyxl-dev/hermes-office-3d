@@ -22,6 +22,7 @@ import secrets
 import threading
 import time
 import urllib.parse
+import urllib.request
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,7 @@ from pathlib import Path
 
 from . import __version__
 from .adapter import build_payload
+from .runactivity import RunActivityObserver, observe_or_empty
 from .config import Settings
 from .hermes_client import HermesClient
 from .redact import Pseudonymiser
@@ -73,13 +75,47 @@ class Store:
         # A single random salt for this server's lifetime keeps each avatar
         # stable across 4-second refreshes, without exposing its raw session id.
         self._pseudonymiser = Pseudonymiser()
-        self._payload: dict = build_payload(settings, pseudonymiser=self._pseudonymiser) if settings.demo_mode else {
+        self._run_activity = RunActivityObserver(
+            settings.run_activity_log,
+            self._pseudonymiser,
+            resolve_run=self._resolve_run if settings.run_activity_log else None,
+        )
+        self._payload: dict = build_payload(
+            settings, pseudonymiser=self._pseudonymiser,
+            run_activity=observe_or_empty(self._run_activity),
+        ) if settings.demo_mode else {
             "mode": "live", "degraded": True, "generated_at": time.time(),
             "summary": {}, "gateway": {"available": False}, "capabilities": {},
             "notes": [], "actors": [],
         }
         self._subscribers: set[queue.Queue] = set()
         self._client = HermesClient(settings)
+
+    def _resolve_run(self, run_id: str) -> dict | None:
+        """Authoritative run status from the local Hermes Runs API (read-only).
+
+        Returns only the two fields we act on. The response is never logged and
+        never forwarded to the browser.
+        """
+        if not self.settings.hermes_api_key:
+            return None
+        req = urllib.request.Request(
+            f"{self.settings.hermes_api_base}/v1/runs/{urllib.parse.quote(str(run_id))}",
+            headers={"Authorization": f"Bearer {self.settings.hermes_api_key}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status != 200:
+                    return None
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        session_id, status = data.get("session_id"), data.get("status")
+        if not session_id and not status:
+            return None
+        return {"session_id": session_id, "status": status}
 
     def payload(self) -> dict:
         with self._lock:
@@ -89,6 +125,7 @@ class Store:
         payload = build_payload(
             self.settings, client=self._client,
             pseudonymiser=self._pseudonymiser,
+            run_activity=observe_or_empty(self._run_activity),
         )
         with self._lock:
             self._payload = payload

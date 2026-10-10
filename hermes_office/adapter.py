@@ -27,6 +27,26 @@ CAPABILITY_NOTES = [
 ]
 
 
+def _with_run_activity(actor: dict, run_activity: dict | None) -> dict:
+    """Attach verified run activity, keyed by pseudonym. Never adds raw ids.
+
+    Only the coarse enum reaches the client: a session is "working" solely when a
+    run was observed executing, otherwise the observer's recency verdict stands.
+    """
+    if not run_activity:
+        return actor
+    entry = run_activity.get(str(actor.get("id")))
+    if not isinstance(entry, dict):
+        return actor
+    merged = dict(actor)
+    merged["run_activity"] = {
+        "state": entry.get("state"),
+        "category": entry.get("category"),
+        "age": entry.get("age"),
+    }
+    return merged
+
+
 def _summarize(actors: list[Actor]) -> dict:
     by_state = {}
     for a in actors:
@@ -61,6 +81,7 @@ def build_payload(
     client: HermesClient | None = None,
     now: float | None = None,
     pseudonymiser: Pseudonymiser | None = None,
+    run_activity: dict | None = None,
 ) -> dict:
     """Return the sanitized office payload.
 
@@ -119,5 +140,5 @@ def build_payload(
         "gateway": _gateway_summary(health),
         "capabilities": cap,
         "notes": CAPABILITY_NOTES,
-        "actors": [scrub_actor(a.to_dict()) for a in actors],
+        "actors": [_with_run_activity(scrub_actor(a.to_dict()), run_activity) for a in actors],
     }
