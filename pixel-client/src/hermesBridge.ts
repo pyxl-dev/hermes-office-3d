@@ -17,6 +17,7 @@ import { postToWebview, onWebviewMessage } from './vscodeApi.js'
 
 let degraded = false
 let currentMode: 'live' | 'demo' = 'live'
+const toolState = new Map<number, string>()
 import {
   loadCharacterSprites,
   loadWallSprites,
@@ -166,6 +167,11 @@ function applyPayload(payload: { mode?: string; actors?: Array<Record<string, un
   const actors = (payload.actors || []).slice(0, MAX_AGENTS)
   setBadge(payload.mode || 'live')
 
+  // Verified tool events only. A character shows activity solely when the
+  // server observed a real, unmatched tool start for that run; nothing here is
+  // inferred from recency. Keyed by renderer id so it survives re-polls.
+  const activeToolByActor = toolState
+
   const seen = new Set<string>()
   for (const actor of actors) {
     const pid = String(actor.id || '')
@@ -177,14 +183,38 @@ function applyPayload(payload: { mode?: string; actors?: Array<Record<string, un
       idByActor.set(pid, id)
       postToWebview({ type: 'agentCreated', id, folderName: friendlyName(actor as { id: string; is_subagent?: boolean }) })
     }
-    // Neutral only: we have no per-conversation tool events, so we never claim a
-    // character is "coding right now". Recency is surfaced in the header badge.
-    postToWebview({ type: 'agentStatus', id, status: 'idle' })
+    const activity = (actor as {
+      run_activity?: { tool_active?: boolean; tool_id?: string; category?: string }
+    }).run_activity
+    const toolId = activity?.tool_active ? String(activity.tool_id || '') : ''
+    const previous = activeToolByActor.get(id)
+
+    if (toolId && toolId !== previous) {
+      // A new verified tool action: close any previous one first, so the
+      // renderer never holds two open tools for the same character.
+      if (previous) {
+        postToWebview({ type: 'agentToolDone', id, toolId: previous })
+        postToWebview({ type: 'agentToolsClear', id })
+      }
+      activeToolByActor.set(id, toolId)
+      postToWebview({ type: 'agentToolStart', id, toolId, status: String(activity?.category || 'other') })
+      postToWebview({ type: 'agentStatus', id, status: 'active' })
+    } else if (!toolId && previous) {
+      // Cleared or expired: stop the animation rather than freeze it busy.
+      activeToolByActor.delete(id)
+      postToWebview({ type: 'agentToolDone', id, toolId: previous })
+      postToWebview({ type: 'agentToolsClear', id })
+      postToWebview({ type: 'agentStatus', id, status: 'idle' })
+    } else if (!toolId) {
+      // No verified event: neutral. Never claim work we cannot observe.
+      postToWebview({ type: 'agentStatus', id, status: 'idle' })
+    }
   }
 
   for (const [pid, id] of [...idByActor.entries()]) {
     if (!seen.has(pid)) {
       postToWebview({ type: 'agentClosed', id })
+      activeToolByActor.delete(id)
       idByActor.delete(pid)
       nameByActor.delete(pid)
     }

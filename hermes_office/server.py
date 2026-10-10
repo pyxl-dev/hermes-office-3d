@@ -22,6 +22,7 @@ import secrets
 import threading
 import time
 import urllib.parse
+import urllib.request
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,8 @@ from pathlib import Path
 
 from . import __version__
 from .adapter import build_payload
+from .runactivity import RunActivityObserver, observe_or_empty
+from .runstream import RunStreamWorker, ToolEventTracker
 from .config import Settings
 from .hermes_client import HermesClient
 from .redact import Pseudonymiser
@@ -73,7 +76,24 @@ class Store:
         # A single random salt for this server's lifetime keeps each avatar
         # stable across 4-second refreshes, without exposing its raw session id.
         self._pseudonymiser = Pseudonymiser()
-        self._payload: dict = build_payload(settings, pseudonymiser=self._pseudonymiser) if settings.demo_mode else {
+        self._run_tools = ToolEventTracker(self._pseudonymiser)
+        self._run_worker = (
+            RunStreamWorker(
+                self._run_tools, settings.hermes_api_base, settings.hermes_api_key,
+                status_check=self._run_status_only,
+            )
+            if settings.run_activity_log and settings.hermes_api_key
+            else None
+        )
+        self._run_activity = RunActivityObserver(
+            settings.run_activity_log,
+            self._pseudonymiser,
+            resolve_run=self._resolve_run if settings.run_activity_log else None,
+        )
+        self._payload: dict = build_payload(
+            settings, pseudonymiser=self._pseudonymiser,
+            run_activity=observe_or_empty(self._run_activity),
+        ) if settings.demo_mode else {
             "mode": "live", "degraded": True, "generated_at": time.time(),
             "summary": {}, "gateway": {"available": False}, "capabilities": {},
             "notes": [], "actors": [],
@@ -81,14 +101,52 @@ class Store:
         self._subscribers: set[queue.Queue] = set()
         self._client = HermesClient(settings)
 
+    def _run_status_only(self, run_id: str) -> str | None:
+        resolved = self._resolve_run(run_id)
+        return None if resolved is None else resolved.get("status")
+
+    def _resolve_run(self, run_id: str) -> dict | None:
+        """Authoritative run status from the local Hermes Runs API (read-only).
+
+        Returns only the two fields we act on. The response is never logged and
+        never forwarded to the browser.
+        """
+        if not self.settings.hermes_api_key:
+            return None
+        req = urllib.request.Request(
+            f"{self.settings.hermes_api_base}/v1/runs/{urllib.parse.quote(str(run_id))}",
+            headers={"Authorization": f"Bearer {self.settings.hermes_api_key}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status != 200:
+                    return None
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        session_id, status = data.get("session_id"), data.get("status")
+        if not session_id and not status:
+            return None
+        return {"session_id": session_id, "status": status}
+
     def payload(self) -> dict:
         with self._lock:
             return self._payload
 
     def refresh(self) -> dict:
+        observed = observe_or_empty(self._run_activity)
+        # Only API-confirmed active runs get a stream, and the reader is deduped
+        # per run id, so a repeatedly polled run never spawns extra threads.
+        if self._run_worker is not None:
+            for run_key, session_id in list(getattr(self._run_activity, "confirmed_runs", {}).items()):
+                self._run_worker.track_run(run_key, session_id)
+        observed.update(self._run_tools.snapshot())
         payload = build_payload(
             self.settings, client=self._client,
             pseudonymiser=self._pseudonymiser,
+            run_activity=observed,
         )
         with self._lock:
             self._payload = payload
@@ -407,6 +465,11 @@ def serve(settings: Settings) -> None:
     httpd = build_server(settings)
     stop = threading.Event()
     threading.Thread(target=_refresher, args=(httpd.store, settings, stop), daemon=True).start()
+    # Bounded SSE readers for confirmed-active runs. Only started when the
+    # optional activity log is configured, so default installs run no extra threads.
+    worker = getattr(httpd.store, "_run_worker", None)
+    if worker is not None:
+        worker.start()
     host, port = httpd.server_address[0], httpd.server_address[1]
     print(f"Hermes Office 3D  running at  http://{host}:{port}", flush=True)
     print(f"  mode: {'demo (synthetic fixtures)' if settings.demo_mode else 'live'}", flush=True)
