@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 # Coarse categories only. Unknown tools map to "other" by design, so a new or
@@ -65,15 +66,22 @@ def _age_bucket(age_s: float) -> str:
 
 
 def _parse_ts(value: Any) -> float | None:
+    """Parse an ISO timestamp, honouring offsets and the Z suffix.
+
+    ``strptime`` on the first 19 chars silently discarded the offset, which is
+    hours wrong for a local-time log.
+    """
     if isinstance(value, (int, float)):
         return float(value)
-    if isinstance(value, str):
-        text = value.strip().replace("Z", "+00:00")
-        try:
-            return time.mktime(time.strptime(text[:19], "%Y-%m-%dT%H:%M:%S"))
-        except ValueError:
-            return None
-    return None
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
 
 
 class RunActivityObserver:
@@ -167,25 +175,19 @@ class RunActivityObserver:
             has_run = bool(record.get("outputRunId"))
             tool = str(record.get("tool") or "")
 
-            # A run observed as running is proof of current execution; a run
-            # observed as terminal is proof it stopped. Records that carry no run
-            # status tell us only that the bridge did something recently.
+            # Strict: a bridge call is never proof of work. A session is
+            # "working" only when the Runs API confirms an active status *and*
+            # returns the session id; anything less stays neutral.
+            state = "recent"
             if has_run and status in ACTIVE_RUN_STATUSES:
-                # Discovery only. The run must be confirmed by the Runs API, and
-                # the session must come from that authoritative answer.
                 confirmed = self._resolve(str(record.get("outputRunId")), now)
-                if confirmed is None:
-                    state = "recent" if self.resolve_run is not None else "working"
-                else:
-                    if str(confirmed.get("status") or "").lower() not in ACTIVE_RUN_STATUSES:
-                        state = "recent"
-                    else:
-                        state = "working"
-                        session_id = confirmed.get("session_id") or session_id
-            elif has_run and status in TERMINAL_RUN_STATUSES:
-                state = "recent"
-            else:
-                state = "working" if age < WORKING_WINDOW_S else "recent"
+                if (
+                    confirmed
+                    and str(confirmed.get("status") or "").lower() in ACTIVE_RUN_STATUSES
+                    and confirmed.get("session_id")
+                ):
+                    state = "working"
+                    session_id = confirmed["session_id"]
 
             category = CATEGORY_BY_TOOL.get(tool, "other")
             previous = latest.get(pseudo := self.pseudonymiser(str(session_id)))

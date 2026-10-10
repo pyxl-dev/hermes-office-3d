@@ -40,12 +40,13 @@ def _record(*, ended_offset: float = 1.0, tool: str = SECRET_TOOL) -> dict:
     }
 
 
-def test_recent_completion_reports_working(tmp_path):
+def test_unverified_bridge_call_is_never_working(tmp_path):
+    """A logged bridge call is discovery, not proof of work."""
     obs = RunActivityObserver(_write_log(tmp_path, [_record(ended_offset=2.0)]), Pseudonymiser(b"salt"))
     out = obs.observe()
     assert len(out) == 1
     entry = next(iter(out.values()))
-    assert entry["state"] == "working"
+    assert entry["state"] == "recent"
     assert entry["category"] == "code"
     assert entry["age"] == "now"
 
@@ -117,8 +118,8 @@ def test_multiple_sessions_are_reported_independently(tmp_path):
     obs = RunActivityObserver(_write_log(tmp_path, [a, b]), Pseudonymiser(b"salt"))
     out = obs.observe()
     assert len(out) == 2
-    states = sorted(e["state"] for e in out.values())
-    assert states == ["recent", "working"]
+    # Neither is API-confirmed, so neither may claim to be working.
+    assert sorted(e["state"] for e in out.values()) == ["recent", "recent"]
 
 
 def test_latest_record_wins_for_a_session(tmp_path):
@@ -126,18 +127,17 @@ def test_latest_record_wins_for_a_session(tmp_path):
     new = _record(ended_offset=1.0, tool="read_file")
     obs = RunActivityObserver(_write_log(tmp_path, [old, new]), Pseudonymiser(b"salt"))
     entry = next(iter(obs.observe().values()))
-    assert entry["state"] == "working" and entry["category"] == "code"
+    assert entry["category"] == "code", "the newest record decides the category"
+    assert entry["state"] == "recent"
 
 
-def test_observed_running_run_means_working(tmp_path):
-    """A run seen as 'running' is proof of current execution, even if the poll
-    record itself is a little old."""
+def test_running_run_without_api_confirmation_is_not_working(tmp_path):
+    """Log status alone is not authoritative; the Runs API must confirm it."""
     rec = _record(ended_offset=90.0)
     rec["status"] = "running"
     rec["outputRunId"] = SECRET_RUN
     obs = RunActivityObserver(_write_log(tmp_path, [rec]), Pseudonymiser(b"salt"))
-    entry = next(iter(obs.observe().values()))
-    assert entry["state"] == "working"
+    assert next(iter(obs.observe().values()))["state"] == "recent"
 
 
 def test_terminal_run_status_is_not_working(tmp_path):
@@ -148,11 +148,11 @@ def test_terminal_run_status_is_not_working(tmp_path):
     assert next(iter(obs.observe().values()))["state"] == "recent"
 
 
-def test_record_without_run_status_falls_back_to_recency(tmp_path):
+def test_record_without_run_status_is_not_working(tmp_path):
     rec = _record(ended_offset=1.0)
     rec.pop("status", None)
     obs = RunActivityObserver(_write_log(tmp_path, [rec]), Pseudonymiser(b"salt"))
-    assert next(iter(obs.observe().values()))["state"] == "working"
+    assert next(iter(obs.observe().values()))["state"] == "recent"
 
 
 def test_bridge_api_tools_never_claim_a_specific_category(tmp_path):
@@ -161,7 +161,10 @@ def test_bridge_api_tools_never_claim_a_specific_category(tmp_path):
     rec = _record(ended_offset=1.0, tool="get_hermes_run")
     rec["status"] = "running"
     rec["outputRunId"] = SECRET_RUN
-    obs = RunActivityObserver(_write_log(tmp_path, [rec]), Pseudonymiser(b"salt"))
+    obs = RunActivityObserver(
+        _write_log(tmp_path, [rec]), Pseudonymiser(b"salt"),
+        resolve_run=lambda rid: {"session_id": "sess-CANONICAL-1", "status": "running"},
+    )
     assert next(iter(obs.observe().values()))["category"] == "other"
 
 
@@ -273,3 +276,27 @@ def test_no_activity_means_no_field_and_no_fake_working():
     payload = build_payload(Settings(hermes_api_key="present"), client=_FakeClient(rows),
                             now=now, run_activity={})
     assert "run_activity" not in json.dumps(payload)
+
+
+def test_confirmation_without_session_id_is_not_working(tmp_path):
+    """An active run that does not name its session cannot be attributed."""
+    obs = RunActivityObserver(
+        _write_log(tmp_path, [_running_record()]), Pseudonymiser(b"salt"),
+        resolve_run=lambda rid: {"session_id": None, "status": "running"},
+    )
+    assert next(iter(obs.observe().values()))["state"] == "recent"
+
+
+def test_timestamps_with_offset_and_z_are_parsed_correctly(tmp_path):
+    """Offset handling must be exact: ignoring it shifts the age by hours."""
+    from hermes_office.runactivity import _parse_ts
+
+    base = 1_700_000_000.0
+    utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(base))
+    off = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(base)) + "+02:00"
+    assert abs(_parse_ts(utc) - base) < 1
+    assert abs(_parse_ts(off) - (base - 7200)) < 1, "a +02:00 timestamp is 2h earlier in UTC"
+    assert _parse_ts("2026-01-01T00:00:00") is not None, "naive stamps are read as UTC"
+    assert _parse_ts("not a date") is None
+    assert _parse_ts(None) is None
+    assert _parse_ts(1234.5) == 1234.5
