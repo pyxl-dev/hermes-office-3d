@@ -126,9 +126,19 @@ def build_payload(
     # A persisted session is not a currently running worker. Old rows must
     # never become idle-looking NPCs that fill the office forever. Only recent
     # activity is visible; both ended and stale sessions are excluded.
+    # A verified-working session must survive the recency filter: a long run can
+    # go quiet for minutes while still genuinely executing, and dropping it would
+    # hide exactly the activity this feature exists to show. Only confirmed
+    # activity (never a guess) buys an exemption.
+    verified = {
+        key
+        for key, entry in (run_activity or {}).items()
+        if isinstance(entry, dict) and entry.get("state") == "working"
+    }
     recent = [
-        actor for actor in (adapt_row(r, now, settings, pseudo) for r in filtered)
-        if actor.state in (STATE_ACTIVE, STATE_IDLE)
+        actor
+        for actor in (adapt_row(r, now, settings, pseudo) for r in filtered)
+        if actor.state in (STATE_ACTIVE, STATE_IDLE) or actor.id in verified
     ]
     recent.sort(key=rank_key)
     actors = recent[:settings.max_actors]

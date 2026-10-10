@@ -367,3 +367,28 @@ def test_working_run_is_not_overwritten_by_a_newer_finished_run(tmp_path):
                                  "status": "running" if rid == "run-live" else "completed"},
     )
     assert next(iter(obs.observe().values()))["state"] == "working"
+
+
+def test_verified_working_session_survives_the_recency_filter():
+    """A long quiet run that is genuinely executing must still have a character."""
+    from hermes_office.adapter import build_payload
+    from hermes_office.config import Settings
+    from test_adapter import _FakeClient
+
+    pseudo = Pseudonymiser(b"salt")
+    now = 1_000_000.0
+    row = {
+        "id": "S-QUIET", "source": "cli", "started_at": now - 900,
+        "last_active": now - 600,   # far outside the idle window
+        "ended_at": None, "message_count": 2, "tool_call_count": 1,
+        "parent_session_id": None, "is_internal_child": False,
+        "archived": False, "hidden": False,
+    }
+    settings = Settings(hermes_api_key="present")
+
+    dropped = build_payload(settings, client=_FakeClient([row]), now=now, pseudonymiser=pseudo)
+    assert dropped["actors"] == [], "baseline: stale sessions are filtered out"
+
+    kept = build_payload(settings, client=_FakeClient([row]), now=now, pseudonymiser=pseudo,
+                         run_activity={pseudo("S-QUIET"): {"state": "working", "category": "other", "age": "now"}})
+    assert [a["id"] for a in kept["actors"]] == [pseudo("S-QUIET")]

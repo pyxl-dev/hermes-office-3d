@@ -274,7 +274,8 @@ class RunStreamWorker:
                     if resp.status != 200:
                         self.tracker.forget_run(run_key)
                         return
-                    for payload in parse_sse_frames(iter(lambda: resp.read(4096), b"")):
+                    read_chunk = getattr(resp, "read1", None) or resp.read
+                    for payload in parse_sse_frames(iter(lambda: read_chunk(4096), b"")):
                         self.tracker.handle(run_key, payload)
             except Exception:
                 # A dropped connection is retried, not fatal; a run that is gone

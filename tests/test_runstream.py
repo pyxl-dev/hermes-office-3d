@@ -152,3 +152,14 @@ def test_forget_run_releases_state():
     t.handle(SECRET_RUN, {"event": "tool.started", "seq": 1, "tool": SECRET_TOOL})
     t.forget_run(SECRET_RUN)
     assert t.snapshot() == {} and t.last_seq(SECRET_RUN) == -1
+
+
+def test_frames_are_emitted_from_partial_chunks():
+    """A small frame must not wait for a full 4 KiB buffer."""
+    whole = frame(9, "tool.started", tool=SECRET_TOOL)
+    emitted = []
+    for n in range(1, len(whole) + 1):
+        emitted = list(parse_sse_frames([whole[:n], whole[n:]]))
+        if emitted:
+            break
+    assert emitted and emitted[0]["seq"] == 9
