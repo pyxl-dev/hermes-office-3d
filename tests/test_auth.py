@@ -30,6 +30,25 @@ def test_api_accepts_header_token(server):
     assert status == 200
 
 
+def test_root_redirects_to_primary_pixel_office_after_auth(server):
+    # The browser's main office URL must open Pixel Agents, never legacy 3D.
+    status, headers, _ = http(server, "/", token=TOKEN)
+    assert status == 303
+    assert headers["Location"] == "/pixel/"
+    status, headers, body = http(server, "/pixel/", token=TOKEN)
+    assert status == 200
+    assert "text/html" in headers["Content-Type"]
+    assert "Hermes Office 3D" not in body
+
+
+def test_root_requires_auth_and_legacy_3d_remains_available(server):
+    status, _, _ = http(server, "/")
+    assert status == 401
+    status, _, body = http(server, "/office.html", token=TOKEN)
+    assert status == 200
+    assert "Hermes Office 3D" in body
+
+
 def test_static_requires_auth(server):
     status, _, _ = http(server, "/office.html")
     assert status == 401
@@ -80,6 +99,7 @@ def test_login_flow_sets_cookie(server):
     assert "office_token=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "SameSite=Strict" in set_cookie
+    assert headers["Location"] == "/pixel/"
     # the cookie then authenticates a static request
     cookie = set_cookie.split(";")[0]
     status, _, body = http(server, "/api/office", cookie=cookie)
