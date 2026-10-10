@@ -52,7 +52,13 @@ rather than extend this prototype.
 
 ## 3. Honest visual comparison
 
-Captured locally at 1440×900 (demo data):
+Captured locally at 1440×900 (demo data). Seating is now a deterministic grid:
+each actor gets its own desk slot and spawns seated, so characters no longer
+cluster.
+
+![Pixel POC, desktop (demo)](screenshots/pixel-poc-demo-desktop-1440x900.png)
+
+![Pixel POC, mobile 390×844 (demo)](screenshots/pixel-poc-demo-mobile-390x844.png)
 
 | | Pixel Agents (upstream, MIT) | `web/pixel` (this branch) |
 |---|---|---|
