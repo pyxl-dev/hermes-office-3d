@@ -21,6 +21,23 @@ work by others; those parts keep their own copyright and license.
 - Vendored verbatim at `web/vendor/three.min.js` so the office runs offline
   (no CDN, no third-party network calls at runtime).
 
+### Pixel Agents — MIT (audit + bundled sprites for the pixel POC)
+- Source: https://github.com/pixel-agents-hq/pixel-agents (commit `d1e007a`, v1.4.1)
+- Copyright (c) 2026 Pablo De Lucca — MIT.
+- What we use: the **character sprite sheets** (`web/pixel/assets/characters/char_0..5.png`)
+  and the **wall tile sheet** (`web/pixel/assets/walls.png`), plus the sprite-sheet
+  layout knowledge (frames 16×32, 7 per row, rows = down/up/right) taken from the
+  upstream loader. The pixel POC engine in `web/pixel/pixel.js` is a small original
+  Canvas2D implementation, not a copy of the upstream renderer.
+- Note: `web/pixel/` is a **visual feasibility prototype**, not a Pixel Agents
+  equivalent — see [`docs/PIXEL_POC.md`](docs/PIXEL_POC.md).
+
+### MetroCity character sprites — CC0 1.0
+- Source: https://jik-a-4.itch.io/metrocity-free-topdown-character-pack (JIK-A-4)
+- License: **Creative Commons Zero v1.0 Universal** (public domain). Redistribution,
+  modification and commercial use are permitted; credit is appreciated, not required.
+- These are the sprites inside the Pixel Agents character sheets above.
+
 ## Inspected but NOT included
 
 ### Hermes3D — MIT

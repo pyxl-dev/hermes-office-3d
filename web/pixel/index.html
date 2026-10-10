@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Hermes Office — Pixel (POC)</title>
+<style>
+  :root{--bg:#12101a;--panel:rgba(22,20,32,.92);--line:#2c2740;--ink:#efe9ff;--dim:#a99fc4;--accent:#ffc857;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;
+    box-shadow:0 0 0 2px #000,0 10px 40px rgba(0,0,0,.6);border-radius:6px}
+  .topbar{position:fixed;top:0;left:0;right:0;display:flex;gap:.5rem;align-items:center;
+    padding:.45rem .6rem;background:linear-gradient(180deg,rgba(10,9,16,.95),rgba(10,9,16,0));
+    z-index:5;flex-wrap:wrap;pointer-events:none}
+  .brand{font-weight:700;font-size:.85rem;letter-spacing:.4px}
+  .badge{font-size:.6rem;font-weight:700;padding:.15rem .45rem;border-radius:4px;border:1px solid var(--line)}
+  .badge.demo{background:var(--accent);color:#241c06}
+  .badge.live{background:#4ade80;color:#08210f}
+  .meta{font-size:.66rem;color:var(--dim)}
+  .pills{margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:.15rem .5rem;font-size:.66rem}
+  #warn{position:fixed;top:2.6rem;left:50%;transform:translateX(-50%);display:none;z-index:6;
+    background:#3a1d1d;border:1px solid #7f1d1d;color:#ffd9d9;padding:.35rem .6rem;border-radius:6px;font-size:.7rem}
+  #panel{position:fixed;right:.6rem;top:2.9rem;width:250px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:.75rem;transform:translateX(120%);transition:transform .2s ease;z-index:7}
+  #panel.open{transform:none}
+  #panel h2{margin:.1rem 0 .35rem;font-size:.85rem}
+  #panel .sub{color:var(--dim);font-size:.62rem;margin:0 0 .5rem}
+  #close{position:absolute;top:.3rem;right:.4rem;background:none;border:0;color:var(--dim);font-size:1rem;cursor:pointer}
+  .kv{display:flex;justify-content:space-between;gap:.5rem;font-size:.72rem;padding:.22rem 0;border-bottom:1px solid var(--line)}
+  .kv span{color:var(--dim)}
+  .hint{position:fixed;left:.6rem;bottom:.6rem;font-size:.62rem;color:var(--dim);z-index:5}
+  body.mobile #panel{top:auto;left:.5rem;right:.5rem;bottom:.6rem;width:auto;transform:translateY(130%)}
+  body.mobile #panel.open{transform:none}
+</style>
+</head>
+<body>
+  <div id="wrap"><canvas id="c" width="208" height="152"></canvas></div>
+  <div class="topbar">
+    <span class="brand">Hermes Office · Pixel</span>
+    <span id="mode" class="badge demo">DEMO</span>
+    <span class="meta"><span id="gw">…</span> · <span id="updated"></span></span>
+    <div class="pills">
+      <span class="pill"><span id="stat-recent">0</span> recent</span>
+      <span class="pill"><span id="stat-sub">0</span> sub</span>
+    </div>
+  </div>
+  <div id="warn"></div>
+  <aside id="panel">
+    <button id="close" aria-label="Close">×</button>
+    <h2 id="pTitle">—</h2>
+    <p class="sub">sanitized view · no titles, prompts or transcripts</p>
+    <div id="pBody"></div>
+  </aside>
+  <div class="hint">click a character for details</div>
+  <script src="pixel.js"></script>
+</body>
+</html>
