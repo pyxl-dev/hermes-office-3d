@@ -130,15 +130,21 @@ function orientationToFacing(orientation: string): Direction {
  *  Facing priority: 1) chair orientation, 2) adjacent desk, 3) forward (DOWN). */
 export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
   const seats = new Map<string, Seat>()
-  // Hermes adaptation: seats adjacent to a desk are handed out first so agents
-  // take workstation chairs; lounge/couch seats are only used on overflow.
+  // Hermes adaptation: seats adjacent to a REAL workstation are handed out first.
+  // Lounge seating (SOFA_*) is only used on overflow. Previously COFFEE_TABLE was
+  // isDesk=true, so couches next to it ranked as workstations and every agent sat
+  // in the lounge while the office desks stayed empty.
   const workstationUids = new Set<string>()
+  const isWorkstationDesk = (id: string) =>
+    /^(DESK_|TABLE_|SMALL_TABLE_|PC_)/.test(id) && !id.startsWith('COFFEE')
+  const isLoungeSeat = (id: string) => /^SOFA/.test(id)
 
   // Build set of all desk tiles
   const deskTiles = new Set<string>()
   for (const item of furniture) {
     const entry = getCatalogEntry(item.type)
     if (!entry || !entry.isDesk) continue
+    if (!isWorkstationDesk(item.type)) continue // COFFEE_TABLE etc. are not desks
     for (let dr = 0; dr < entry.footprintH; dr++) {
       for (let dc = 0; dc < entry.footprintW; dc++) {
         deskTiles.add(`${item.col + dc},${item.row + dr}`)
@@ -190,12 +196,14 @@ export function layoutToSeats(furniture: PlacedFurniture[]): Map<string, Seat> {
           facingDir,
           assigned: false,
         })
-        // Hermes adaptation: remember which seats sit at a workstation (a chair
-        // adjacent to a desk) so they can be handed out before lounge seating.
-        for (const d of dirs) {
-          if (deskTiles.has(`${tileCol + d.dc},${tileRow + d.dr}`)) {
-            workstationUids.add(seatUid)
-            break
+        // Hermes adaptation: remember whether this seat is a real workstation seat
+        // (a non-lounge chair/bench next to a workstation desk).
+        if (!isLoungeSeat(item.type)) {
+          for (const d of dirs) {
+            if (deskTiles.has(`${tileCol + d.dc},${tileRow + d.dr}`)) {
+              workstationUids.add(seatUid)
+              break
+            }
           }
         }
         seatCount++

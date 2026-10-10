@@ -67,5 +67,8 @@ def test_source_orders_workstation_seats_first():
 
 def test_camera_fits_the_layout_to_the_viewport():
     src = (SRC / "office" / "components" / "OfficeCanvas.tsx").read_text(encoding="utf-8")
-    assert "fit the whole compact room to the viewport" in src
+    # fits the occupied bbox (ignoring void rows), in device pixels, retried until sized
+    assert "fitToRoom" in src
+    assert "canvas.width / bboxW" in src
+    assert "const VOID = 255" in src
     assert "onZoomChange(z)" in src

@@ -60,27 +60,70 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
     }
   }, [officeState, zoom])
 
-  // Hermes adaptation: fit the whole compact room to the viewport (CSS pixels) so
-  // the office is never a small island in a large empty canvas. Re-fits on resize.
-  useEffect(() => {
-    const fit = () => {
-      const container = containerRef.current
-      if (!container) return
-      const rect = container.getBoundingClientRect()
-      if (!rect.width || !rect.height) return
-      const layout = officeState.getLayout()
-      const mapW = layout.cols * TILE_SIZE
-      const mapH = layout.rows * TILE_SIZE
-      const z = Math.max(1, Math.min(6, Math.min(rect.width / mapW, rect.height / mapH) * 0.98))
-      onZoomChange(z)
+  // Hermes adaptation: fit the ACTUAL occupied area of the layout (ignoring the
+  // void rows above the room) and centre it. The renderer draws in DEVICE pixels
+  // (no ctx.scale(dpr)), so the fit must use canvas.width/height. Returns false
+  // until the canvas has been sized, so callers can retry.
+  const fitToRoom = useCallback((): boolean => {
+    const canvas = canvasRef.current
+    if (!canvas || !canvas.width || !canvas.height) return false
+    const layout = officeState.getLayout()
+    const { cols, rows, tiles } = layout as unknown as {
+      cols: number; rows: number; tiles: Array<number | undefined>
     }
-    fit()
-    window.addEventListener('resize', fit)
-    return () => window.removeEventListener('resize', fit)
-  }, [officeState, onZoomChange])
+    const VOID = 255
+    let minC = cols, maxC = -1, minR = rows, maxR = -1
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const t = tiles[r * cols + c]
+        if (t !== undefined && t !== VOID) {
+          if (c < minC) minC = c
+          if (c > maxC) maxC = c
+          if (r < minR) minR = r
+          if (r > maxR) maxR = r
+        }
+      }
+    }
+    for (const f of (layout as unknown as { furniture: Array<{ col: number; row: number }> }).furniture) {
+      if (f.col < minC) minC = f.col
+      if (f.col > maxC) maxC = f.col
+      if (f.row < minR) minR = f.row
+      if (f.row > maxR) maxR = f.row
+    }
+    if (maxC < minC || maxR < minR) return false
+    const bboxW = (maxC - minC + 1) * TILE_SIZE
+    const bboxH = (maxR - minR + 1) * TILE_SIZE
+    const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(canvas.width / bboxW, canvas.height / bboxH) * 0.92))
+    const cx = (minC + (maxC - minC + 1) / 2) * TILE_SIZE
+    const cy = (minR + (maxR - minR + 1) / 2) * TILE_SIZE
+    onZoomChange(z)
+    // same centring formula the camera-follow path uses, applied to the bbox
+    panRef.current = {
+      x: (cols * TILE_SIZE) / 2 - cx * z,
+      y: (rows * TILE_SIZE) / 2 - cy * z,
+    }
+    return true
+  }, [officeState, onZoomChange, panRef])
+
+  // Retry until the canvas is sized, and re-fit on resize.
+  useEffect(() => {
+    let raf = 0
+    let tries = 0
+    const tick = () => {
+      if (fitToRoom() || tries++ > 90) return
+      raf = requestAnimationFrame(tick)
+    }
+    tick()
+    window.addEventListener('resize', tick)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', tick)
+    }
+  }, [fitToRoom])
 
   // Resize canvas backing store to device pixels (no DPR transform on ctx)
   const resizeCanvas = useCallback(() => {
+    // (fit runs at the end of this callback, once canvas.width/height are real)
     const canvas = canvasRef.current
     const container = containerRef.current
     if (!canvas || !container) return
@@ -91,7 +134,8 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
     canvas.style.width = `${rect.width}px`
     canvas.style.height = `${rect.height}px`
     // No ctx.scale(dpr) — we render directly in device pixels
-  }, [])
+    fitToRoom()
+  }, [fitToRoom])
 
   useEffect(() => {
     const canvas = canvasRef.current

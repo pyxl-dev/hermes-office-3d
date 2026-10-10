@@ -86,7 +86,6 @@ export function useExtensionMessages(
     const handler = (e: MessageEvent) => {
       const msg = e.data
       const os = getOfficeState()
-
       if (msg.type === 'layoutLoaded') {
         // Skip external layout updates while editor has unsaved changes
         if (layoutReadyRef.current && isEditDirty?.()) {
