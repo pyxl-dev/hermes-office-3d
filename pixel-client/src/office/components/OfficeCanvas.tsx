@@ -91,11 +91,14 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
     const cx = (minC + (maxC - minC + 1) / 2) * TILE_SIZE
     const cy = (minR + (maxR - minR + 1) / 2) * TILE_SIZE
     onZoomChange(z)
-    // panRef IS the screen offset of world (0,0): the renderer draws at
-    // `offsetX + x*zoom`, so centring the bbox means offset = viewport/2 - centre*zoom.
+    // renderFrame computes offsetX = floor((canvasWidth - mapW)/2) + round(panX), so
+    // pan is measured from the centred map, NOT from the viewport origin. Centring the
+    // bbox therefore means pan = mapW/2 - centre*zoom (the same form camera-follow uses).
+    const mapW = cols * TILE_SIZE * z
+    const mapH = rows * TILE_SIZE * z
     panRef.current = {
-      x: canvas.width / 2 - cx * z,
-      y: canvas.height / 2 - cy * z,
+      x: mapW / 2 - cx * z,
+      y: mapH / 2 - cy * z,
     }
     return true
   }, [officeState, onZoomChange, panRef])
