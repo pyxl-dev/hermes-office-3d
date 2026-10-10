@@ -117,7 +117,10 @@ export function useExtensionMessages(
         const folderName = msg.folderName as string | undefined
         setAgents((prev) => (prev.includes(id) ? prev : [...prev, id]))
         setSelectedAgent(id)
-        os.addAgent(id, undefined, undefined, undefined, undefined, folderName)
+        // Hermes adaptation: agents are restored from a live snapshot, not spawned
+        // interactively, so skip the Matrix "materialise" effect. Without this the
+        // characters stayed stuck in the spawn effect and were effectively invisible.
+        os.addAgent(id, undefined, undefined, undefined, true, folderName)
         saveAgentSeats(os)
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number

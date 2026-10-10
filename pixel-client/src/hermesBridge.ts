@@ -55,6 +55,15 @@ function setBadge(mode: string): void {
   el.style.color = demo ? '#241c06' : '#08210f'
 }
 
+async function fetchPayload(): Promise<void> {
+  try {
+    const res = await fetch('/api/office', { cache: 'no-store' })
+    if (res.status === 401 || res.status === 403) { window.location.href = '/login'; return }
+    if (!res.ok) return
+    applyPayload(await res.json())
+  } catch { /* transient */ }
+}
+
 async function handleReady(): Promise<void> {
   try {
     postToWebview({ type: 'settingsLoaded', soundEnabled: false })
@@ -74,14 +83,23 @@ async function handleReady(): Promise<void> {
     if (walls.length) postToWebview({ type: 'wallTilesLoaded', sprites: walls })
   } catch { /* ignore */ }
 
-  // The furnished room: load the layout ALWAYS (independent of the catalog), so a
-  // missing furniture catalog can never silently downgrade the office.
-  let layout: Record<string, unknown> | null = null
   try {
     const assets = await loadFurnitureAssets()
     if (assets) {
       postToWebview({ type: 'furnitureAssetsLoaded', catalog: assets.catalog, sprites: assets.sprites })
     }
+  } catch { /* ignore */ }
+
+  // IMPORTANT ORDERING: emit the agents BEFORE the layout. The renderer buffers
+  // agents that arrive before `layoutLoaded` and adds them with
+  // `skipSpawnEffect=true`; agents that arrive after are added with the Matrix
+  // "materialise" effect, which left them effectively invisible in practice.
+  await fetchPayload()
+
+  // The furnished room: load the layout ALWAYS (independent of the catalog), so a
+  // missing furniture catalog can never silently downgrade the office.
+  let layout: Record<string, unknown> | null = null
+  try {
     layout = await loadDefaultLayout()
   } catch { /* ignore */ }
   postToWebview({ type: 'layoutLoaded', layout })
