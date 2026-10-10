@@ -205,7 +205,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
-        self._finish_headers(extra)
+        # Redirects must never be cached: a browser that cached the old "/" -> 3D
+        # response would keep landing on the legacy view after the 2D switch.
+        headers = {"Cache-Control": "no-store"}
+        headers.update(extra or {})
+        self._finish_headers(headers)
         self.end_headers()
 
     # -- routing ---------------------------------------------------------------

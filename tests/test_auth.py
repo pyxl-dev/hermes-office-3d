@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from conftest import TOKEN, http, json_body
 
 
@@ -148,3 +150,11 @@ def test_sse_accepts_cookie_auth(server):
     sock.close()
     assert "200" in head.split("\r\n")[0]
     assert "text/event-stream" in head
+
+
+def test_root_redirect_is_not_cacheable():
+    """A cached 303 to the legacy view would keep sending users back to 3D."""
+    src = (Path(__file__).resolve().parent.parent / "hermes_office" / "server.py").read_text(encoding="utf-8")
+    start = src.index("def _redirect")
+    fn = src[start : src.index("\n    def ", start + 1)]
+    assert 'Cache-Control' in fn and 'no-store' in fn
