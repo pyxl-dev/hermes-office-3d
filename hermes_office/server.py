@@ -31,6 +31,7 @@ from pathlib import Path
 from . import __version__
 from .adapter import build_payload
 from .runactivity import RunActivityObserver, observe_or_empty
+from .runstream import RunStreamWorker, ToolEventTracker
 from .config import Settings
 from .hermes_client import HermesClient
 from .redact import Pseudonymiser
@@ -75,6 +76,12 @@ class Store:
         # A single random salt for this server's lifetime keeps each avatar
         # stable across 4-second refreshes, without exposing its raw session id.
         self._pseudonymiser = Pseudonymiser()
+        self._run_tools = ToolEventTracker(self._pseudonymiser)
+        self._run_worker = (
+            RunStreamWorker(self._run_tools, settings.hermes_api_base, settings.hermes_api_key)
+            if settings.run_activity_log and settings.hermes_api_key
+            else None
+        )
         self._run_activity = RunActivityObserver(
             settings.run_activity_log,
             self._pseudonymiser,
@@ -122,10 +129,17 @@ class Store:
             return self._payload
 
     def refresh(self) -> dict:
+        observed = observe_or_empty(self._run_activity)
+        # Only API-confirmed active runs get a stream, and the reader is deduped
+        # per run id, so a repeatedly polled run never spawns extra threads.
+        if self._run_worker is not None:
+            for run_key, session_id in list(getattr(self._run_activity, "confirmed_runs", {}).items()):
+                self._run_worker.track_run(run_key, session_id)
+        observed.update(self._run_tools.snapshot())
         payload = build_payload(
             self.settings, client=self._client,
             pseudonymiser=self._pseudonymiser,
-            run_activity=observe_or_empty(self._run_activity),
+            run_activity=observed,
         )
         with self._lock:
             self._payload = payload
@@ -444,6 +458,11 @@ def serve(settings: Settings) -> None:
     httpd = build_server(settings)
     stop = threading.Event()
     threading.Thread(target=_refresher, args=(httpd.store, settings, stop), daemon=True).start()
+    # Bounded SSE readers for confirmed-active runs. Only started when the
+    # optional activity log is configured, so default installs run no extra threads.
+    worker = getattr(httpd.store, "_run_worker", None)
+    if worker is not None:
+        worker.start()
     host, port = httpd.server_address[0], httpd.server_address[1]
     print(f"Hermes Office 3D  running at  http://{host}:{port}", flush=True)
     print(f"  mode: {'demo (synthetic fixtures)' if settings.demo_mode else 'live'}", flush=True)

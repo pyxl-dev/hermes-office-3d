@@ -39,10 +39,23 @@ def test_hermes_bridge_emits_agents_before_layout():
     assert poll_at < restore_at, "agents must be emitted before a layout is loaded"
 
 
-def test_bridge_never_fakes_tool_activity():
+def test_bridge_only_animates_verified_tool_activity():
+    """The bridge may now emit tool events, but only from server-verified state.
+
+    It must never invent activity: tool events are gated on the sanitized
+    run_activity.tool_active flag, and every other path stays idle.
+    """
     src = (SRC / "hermesBridge.ts").read_text(encoding="utf-8")
-    assert "agentToolStart" not in src, "live mode must not fabricate tool activity"
+    assert "run_activity" in src and "tool_active" in src
+    # the start path is reachable only behind the verified flag
+    start = src.index("agentToolStart")
+    guard = src.rindex("activity?.tool_active", 0, start)
+    assert guard != -1, "agentToolStart must sit behind the verified activity flag"
+    # neutral fallback for anything unverified
     assert "status: 'idle'" in src
+    # no raw tool name or preview may be forwarded
+    for forbidden in ("msg.preview", "preview:", "toolName:", "arguments"):
+        assert forbidden not in src, f"{forbidden} must not be sent to the renderer"
 
 
 def test_built_bundle_has_no_sourcemaps_or_debug_hook():

@@ -39,11 +39,18 @@ def _with_run_activity(actor: dict, run_activity: dict | None) -> dict:
     if not isinstance(entry, dict):
         return actor
     merged = dict(actor)
-    merged["run_activity"] = {
+    activity = {
         "state": entry.get("state"),
         "category": entry.get("category"),
         "age": entry.get("age"),
     }
+    # A verified tool event refines this: it is the only thing allowed to make a
+    # character look like it is actively working on something.
+    if entry.get("tool_active"):
+        activity["tool_active"] = True
+        activity["tool_id"] = entry.get("tool_id")
+        activity["category"] = entry.get("category")
+    merged["run_activity"] = activity
     return merged
 
 

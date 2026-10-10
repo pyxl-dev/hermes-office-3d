@@ -109,6 +109,8 @@ class RunActivityObserver:
         self.resolve_ttl_s = resolve_ttl_s
         self.max_resolutions = max_resolutions
         self._cache: dict[str, tuple[float, dict | None]] = {}
+        # Runs the Runs API confirmed active, with their verified session.
+        self.confirmed_runs: dict[str, str] = {}
 
     def enabled(self) -> bool:
         return bool(self.path) and os.path.isfile(self.path)
@@ -188,6 +190,7 @@ class RunActivityObserver:
                 ):
                     state = "working"
                     session_id = confirmed["session_id"]
+                    self.confirmed_runs[str(record.get("outputRunId"))] = str(session_id)
 
             category = CATEGORY_BY_TOOL.get(tool, "other")
             previous = latest.get(pseudo := self.pseudonymiser(str(session_id)))
