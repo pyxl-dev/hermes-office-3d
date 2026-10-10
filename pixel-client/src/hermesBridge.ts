@@ -14,6 +14,9 @@
  */
 
 import { postToWebview, onWebviewMessage } from './vscodeApi.js'
+
+let degraded = false
+let currentMode: 'live' | 'demo' = 'live'
 import {
   loadCharacterSprites,
   loadWallSprites,
@@ -49,15 +52,58 @@ function setBadge(mode: string): void {
       'padding:3px 8px;border-radius:4px;letter-spacing:.5px'
     document.body.appendChild(el)
   }
+  currentMode = mode === 'demo' ? 'demo' : 'live'
   const demo = mode === 'demo'
-  el.textContent = demo ? 'DEMO' : 'LIVE'
-  el.style.background = demo ? '#ffc857' : '#4ade80'
-  el.style.color = demo ? '#241c06' : '#08210f'
+  el.textContent = demo ? 'DEMO' : degraded ? 'DISCONNECTED' : 'LIVE'
+  el.style.background = demo ? '#ffc857' : degraded ? '#ef4444' : '#4ade80'
+  el.style.color = demo ? '#241c06' : degraded ? '#ffffff' : '#08210f'
+}
+
+/** Live-but-unreachable API must not be reported as healthy. */
+export function setDegraded(value: boolean): void {
+  if (value === degraded) return
+  degraded = value
+  setBadge(currentMode)
+}
+
+/** Reviewer P2: the layout saved by the renderer was never loaded back. */
+function restoreSavedLayout(): void {
+  try {
+    const raw = localStorage.getItem('hermes-office-layout')
+    if (!raw) return
+    const layout = JSON.parse(raw) as { cols?: unknown; rows?: unknown; furniture?: unknown }
+    if (typeof layout?.cols !== 'number' || typeof layout?.rows !== 'number') return
+    if (!Array.isArray(layout?.furniture)) return
+    postToWebview({ type: 'layoutLoaded', layout })
+  } catch {
+    /* corrupt entry: ignore rather than break startup */
+  }
+}
+
+/** Reviewer P2: Settings import/export have no handler in Hermes mode. */
+function hideInertSettings(): void {
+  const hide = () => {
+    for (const el of Array.from(document.querySelectorAll('button'))) {
+      if (/^(settings|import|export|save|load)$/i.test((el.textContent || '').trim())) {
+        el.style.display = 'none'
+        el.setAttribute('aria-hidden', 'true')
+      }
+    }
+  }
+  hide()
+  window.setInterval(hide, 1500)
 }
 
 async function fetchPayload(): Promise<void> {
   try {
     const res = await fetch('/api/office', { cache: 'no-store' })
+    // Reviewer P2: a degraded (live but unreachable) API must not show healthy.
+    try {
+      const probe = (await res.clone().json()) as { degraded?: boolean }
+      setDegraded(probe?.degraded === true)
+    } catch {
+      /* keep the last known state */
+    }
     if (res.status === 401 || res.status === 403) { window.location.href = '/login'; return }
     if (!res.ok) return
     applyPayload(await res.json())
@@ -170,8 +216,12 @@ export async function initHermesBridge(): Promise<void> {
       // React is mounted and listening now — load assets, then start feeding it.
       await handleReady()
       await poll()
+      // Restore only AFTER the first payload: agents must exist before a layout
+      // is loaded, otherwise restored agents get stuck in the spawn animation.
+      restoreSavedLayout()
       window.setInterval(poll, POLL_MS)
       hideInertControls()
+      hideInertSettings()
     }
     // Clicking an avatar asks the backend to focus that agent. We answer with the
     // sanitized selection event the app expects (no transcript, no raw ids).

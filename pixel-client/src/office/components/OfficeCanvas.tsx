@@ -84,12 +84,6 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
         }
       }
     }
-    for (const f of (layout as unknown as { furniture: Array<{ col: number; row: number }> }).furniture) {
-      if (f.col < minC) minC = f.col
-      if (f.col > maxC) maxC = f.col
-      if (f.row < minR) minR = f.row
-      if (f.row > maxR) maxR = f.row
-    }
     if (maxC < minC || maxR < minR) return false
     const bboxW = (maxC - minC + 1) * TILE_SIZE
     const bboxH = (maxR - minR + 1) * TILE_SIZE
@@ -97,10 +91,11 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
     const cx = (minC + (maxC - minC + 1) / 2) * TILE_SIZE
     const cy = (minR + (maxR - minR + 1) / 2) * TILE_SIZE
     onZoomChange(z)
-    // same centring formula the camera-follow path uses, applied to the bbox
+    // panRef IS the screen offset of world (0,0): the renderer draws at
+    // `offsetX + x*zoom`, so centring the bbox means offset = viewport/2 - centre*zoom.
     panRef.current = {
-      x: (cols * TILE_SIZE) / 2 - cx * z,
-      y: (rows * TILE_SIZE) / 2 - cy * z,
+      x: canvas.width / 2 - cx * z,
+      y: canvas.height / 2 - cy * z,
     }
     return true
   }, [officeState, onZoomChange, panRef])

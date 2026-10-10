@@ -32,10 +32,11 @@ def test_agents_added_without_spawn_effect():
 
 def test_hermes_bridge_emits_agents_before_layout():
     src = (SRC / "hermesBridge.ts").read_text(encoding="utf-8")
-    agent_at = src.find("await fetchPayload()")
-    layout_at = src.find("postToWebview({ type: 'layoutLoaded'")
-    assert agent_at != -1 and layout_at != -1
-    assert agent_at < layout_at, "agents must be emitted before the layout is loaded"
+    # Runtime order in the ready handler: poll (emits agents) before any layout load.
+    ready = src.index("await handleReady()")
+    poll_at = src.index("await poll()", ready)
+    restore_at = src.index("restoreSavedLayout()", poll_at)
+    assert poll_at < restore_at, "agents must be emitted before a layout is loaded"
 
 
 def test_bridge_never_fakes_tool_activity():
