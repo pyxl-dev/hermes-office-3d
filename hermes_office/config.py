@@ -47,6 +47,7 @@ _SUPPORTED_ENV_KEYS = frozenset({
     "HERMES_OFFICE_MAX_ACTORS",
     "HERMES_API_BASE",
     "HERMES_API_KEY",
+    "HERMES_OFFICE_RUN_ACTIVITY_LOG",
 })
 
 
@@ -136,6 +137,9 @@ class Settings:
     max_actors: int = 48
 
     # Binding to anything but loopback is refused unless this is explicitly set.
+    # Optional local run-activity log. Env-only, empty by default: the observer
+    # stays off unless an operator points it at a log they own.
+    run_activity_log: str = ""
     allow_remote: bool = False
 
     # Session sources that mean "agent-to-agent" rather than a person.
@@ -174,6 +178,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            run_activity_log=_env("HERMES_OFFICE_RUN_ACTIVITY_LOG", ""),
             host=_env("HERMES_OFFICE_HOST", "127.0.0.1"),
             port=_env_int("HERMES_OFFICE_PORT", 8765),
             hermes_api_base=_env("HERMES_API_BASE", "http://127.0.0.1:8642").rstrip("/"),
