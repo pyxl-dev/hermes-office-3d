@@ -37,3 +37,6 @@ Thumbs.db
 # --- node (only if you add a bundler) ---------------------------------------
 node_modules/
 npm-debug.log*
+
+# pixel-client build deps (built assets are committed under web/pixel)
+pixel-client/node_modules/
