@@ -100,12 +100,23 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
     return true
   }, [officeState, onZoomChange, panRef])
 
-  // Retry until the canvas is sized, and re-fit on resize.
+  // Re-fit until the canvas backing store actually matches its CSS box: the canvas
+  // is resized after mount, and fitting against a stale (shorter) buffer centred
+  // the room against the wrong height, leaving a large empty band.
   useEffect(() => {
     let raf = 0
     let tries = 0
     const tick = () => {
-      if (fitToRoom() || tries++ > 90) return
+      const canvas = canvasRef.current
+      if (canvas && canvas.width && canvas.height) {
+        const rect = canvas.getBoundingClientRect()
+        const dpr = window.devicePixelRatio || 1
+        const matches =
+          Math.abs(canvas.width - rect.width * dpr) < 2 && Math.abs(canvas.height - rect.height * dpr) < 2
+        fitToRoom()
+        if (matches) return
+      }
+      if (tries++ > 240) return
       raf = requestAnimationFrame(tick)
     }
     tick()
@@ -278,7 +289,6 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
           officeState.getLayout().rows,
         )
         offsetRef.current = { x: offsetX, y: offsetY }
-
         // Store delete/rotate button bounds for hit-testing
         deleteButtonBoundsRef.current = editorRender?.deleteButtonBounds ?? null
         rotateButtonBoundsRef.current = editorRender?.rotateButtonBounds ?? null

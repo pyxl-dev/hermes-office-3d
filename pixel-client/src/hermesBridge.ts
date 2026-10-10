@@ -84,7 +84,9 @@ function restoreSavedLayout(): void {
 function hideInertSettings(): void {
   const hide = () => {
     for (const el of Array.from(document.querySelectorAll('button'))) {
-      if (/^(settings|import|export|save|load)$/i.test((el.textContent || '').trim())) {
+      // Only import/export are unimplemented here. Settings and Save stay usable:
+      // hiding them would break the layout editor.
+      if (/^(import|export)(\s|$)/i.test((el.textContent || '').trim())) {
         el.style.display = 'none'
         el.setAttribute('aria-hidden', 'true')
       }
@@ -105,9 +107,18 @@ async function fetchPayload(): Promise<void> {
       /* keep the last known state */
     }
     if (res.status === 401 || res.status === 403) { window.location.href = '/login'; return }
-    if (!res.ok) return
-    applyPayload(await res.json())
-  } catch { /* transient */ }
+    if (!res.ok) {
+      setDegraded(true)
+      return
+    }
+    const data = (await res.json()) as { degraded?: boolean }
+    // Reviewer P2: degraded must be re-evaluated on every poll, not only at startup.
+    setDegraded(data?.degraded === true)
+    applyPayload(data as unknown as Parameters<typeof applyPayload>[0])
+  } catch {
+    // Reviewer P2: a network failure must not leave a stale green LIVE badge.
+    setDegraded(true)
+  }
 }
 
 async function handleReady(): Promise<void> {
@@ -187,9 +198,18 @@ async function poll(): Promise<void> {
       window.location.href = '/login'
       return
     }
-    if (!res.ok) return
-    applyPayload(await res.json())
-  } catch { /* transient */ }
+    if (!res.ok) {
+      // Reviewer P2: an outage after login must not keep showing a green LIVE badge.
+      setDegraded(true)
+      return
+    }
+    const data = (await res.json()) as { degraded?: boolean }
+    setDegraded(data?.degraded === true)
+    applyPayload(data as unknown as Parameters<typeof applyPayload>[0])
+  } catch {
+    // Reviewer P2: network failure is not health.
+    setDegraded(true)
+  }
 }
 
 /**
