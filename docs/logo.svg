@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="hermes-office-3d">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1fb5a3"/>
+      <stop offset="1" stop-color="#0d4f6b"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <!-- office cube -->
+  <path d="M256 104 386 180v152L256 408 126 332V180z" fill="#fff" fill-opacity=".1" stroke="#fff" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M126 180 256 256 386 180M256 256v152" fill="none" stroke="#fff" stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- character standing in the office -->
+  <circle cx="256" cy="162" r="21" fill="#fff"/>
+  <path d="M222 224a34 26 0 0 1 68 0z" fill="#fff"/>
+</svg>
